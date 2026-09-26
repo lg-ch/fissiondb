@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="fissiondb-logo.png" alt="FissionDB logo: progressive cell division" width="180">
+</p>
+
 # FissionDB
 
 Vector retrieval for large collections with a small RAM footprint. FissionDB keeps
