@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mangrove-search"
+version = "0.3.0.dev0"
+description = "Native low-memory vector search on local NVMe"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.21"]
+classifiers = ["Development Status :: 3 - Alpha", "Operating System :: POSIX :: Linux", "Programming Language :: Python :: 3"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+s3 = ["boto3"]
+
+[project.scripts]
+mangrove-build = "mangrove.cli:main"
+mangrove-serve = "serve_anchors:main"
+mangrove-calibrate = "mangrove.calibration:main"
+
+[project.urls]
+Repository = "https://github.com/lg-ch/FissionDB"
+Issues = "https://github.com/lg-ch/FissionDB/issues"
+
+[tool.setuptools]
+package-dir = {"" = "scripts"}
+py-modules = ["serve_anchors", "check_anchor_s3"]
+
+[tool.setuptools.packages.find]
+where = ["scripts"]
+include = ["mangrove"]
+
+[tool.setuptools.package-data]
+mangrove = ["py.typed"]

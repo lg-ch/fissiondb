@@ -1,0 +1,14 @@
+{
+  "experiment": "Exact unique candidate coverage versus eligible entry coverage",
+  "datasets": {"msmarco": {"vectors": 113520750, "dimensions": 1024, "queries": 128}, "commoncrawl": {"vectors": 52903544, "dimensions": 128, "queries": 200}},
+  "budgets": [32, 64, 128, 256, 512],
+  "selection": "First 64 MS MARCO questions only; scalar thresholds selected for mean recall >= 0.96 and minimum fixed-budget replay latency",
+  "thresholds": {"entry_fraction": 0.0039003444970210376, "unique_fraction": 0.007046550685667598},
+  "msmarco_other_64_recall": {"fixed_256_cells": 0.928125, "entry_fraction": 0.915625, "unique_fraction": 0.915625},
+  "commoncrawl_transfer_recall": {"fixed_256_cells": 0.992, "entry_fraction": 0.9935, "unique_fraction": 0.9935},
+  "msmarco_128_cells": {"mean_entries": 1027316.078125, "mean_unique_vectors": 893161.75, "paired_counter_extra_median_ms": 34.34713452588767},
+  "tests_passed": 88,
+  "asan_ubsan_diagnostic_tests_passed": 6,
+  "conclusion": "No observed recall improvement from replacing entry fraction with exact unique fraction in this experiment; do not enable as production stopping policy",
+  "limitations": ["Previously inspected datasets and small query samples; exploratory, not independent certification", "Transfer changes query type and codec", "Replayed search latency excludes counting and progressive rereads; not an implemented adaptive latency result", "Counter overhead is an alternating-order warm diagnostic comparison and remains timing-noisy", "Only unfiltered frozen indexes tested"]
+}

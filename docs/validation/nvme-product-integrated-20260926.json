@@ -1,0 +1,34 @@
+{
+  "index": "/root/mangrove-datasets/msmarco-e78737fe/index-200k",
+  "n": 113520750,
+  "dim": 1024,
+  "anchors": 200000,
+  "probes": 1536,
+  "rerank": 400,
+  "queries": 600,
+  "protocol": "Reused 600 real validation queries; one CPU5, cgroup1GB/swap0. fadvise before each query. Before buffered serial waves; integrated direct overlapped waves. Full originals on NVMe. Every final ID and score compared exactly. No S3 or ingestion.",
+  "resources": {
+    "memory.max": "999997440",
+    "memory.peak": "261742592",
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "0",
+    "cpuset.cpus.effective": "5"
+  },
+  "summary": [
+    {
+      "variant": "integrated",
+      "recall": 0.9625,
+      "p50_ms": 52.693151868879795,
+      "p95_ms": 62.59103307966142,
+      "mean_stages": {
+        "anchor_ms": 7.510588548183441,
+        "io_ms": 8.029766098658245,
+        "score_ms": 34.898596082528435,
+        "rerank_ms": 2.1126605606079103,
+        "total_ms": 52.60663750886917,
+        "entries": 1845177.5033333334,
+        "bytes": 138387415.04
+      }
+    }
+  ]
+}

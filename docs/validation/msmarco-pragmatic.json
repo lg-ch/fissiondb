@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fingerprint": "5f89e194d9bb3619f3c234b3ec6dca0e2ed7526ec80fc18228841645588d464f",
+  "validated": true,
+  "configuration": {
+    "minimum": 512,
+    "maximum": 512,
+    "filtered_minimum": 512,
+    "rerank": 1000,
+    "gap": 0
+  },
+  "top_k": 10,
+  "target_recall": 0.95,
+  "latency_target_ms": null,
+  "calibration_count": 113520750,
+  "validation_method": "Empirical held-out mean; not a statistical recall guarantee",
+  "audit_summary": {
+    "queries": 600,
+    "recall": 0.9588333333333332,
+    "recall_lower_95": 0.9303867948574541,
+    "p50_ms": 152.37035998143256,
+    "p95_ms": 188.25568794272837,
+    "p99_ms": 201.20397224556652,
+    "mean_ms": 152.41866200231016
+  },
+  "dimension": 1024,
+  "dataset_revision": "e78737fe92ac1b783211b705c12207ca75fcc9b7",
+  "query_selection": "600 reserved real TREC questions, distinct from 600 calibration questions and 320 previously used questions; normalized text duplicates excluded",
+  "training_summary": {
+    "queries": 600,
+    "recall": 0.9603333333333334,
+    "recall_lower": 0.9289209981709289,
+    "mean_ms": 138.9465977367945,
+    "p50_ms": 138.84935365058482,
+    "p95_ms": 171.8798952177167
+  },
+  "resources": {
+    "memory.peak": "599916544\n",
+    "memory.max": "999997440\n",
+    "memory.swap.max": "0\n",
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "io.stat": "259:0 rbytes=191190913024 wbytes=4096 rios=2277449 wios=1 dbytes=0 dios=0\n"
+  },
+  "elapsed_seconds": 103.60291194915771,
+  "cache_protocol": "POSIX_FADV_DONTNEED request on base and residual codes before every query",
+  "ground_truth": {
+    "rows": 113520750,
+    "total": 113520750,
+    "elapsed_seconds": 1541.8226120471954,
+    "vectors_per_second": 73627.63336910064
+  },
+  "note": "Larger-budget exploration stopped at user preference for dimension/2. Calibration training reused, no completed audit result consulted before this fixed choice.",
+  "production_default": "nprobe = min(cell_count, max(1, indexed_dimension // 2)); no fitting or GT on ingestion; rerank remains explicit"
+}

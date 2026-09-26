@@ -1,0 +1,180 @@
+{
+  "corpus": "Common Crawl web graph embeddings",
+  "revision": "cc1b20615e04067e135824c80f07e88597d7bb33",
+  "frozen_count": 52903544,
+  "dimension": 128,
+  "encoding": "TQ4, M=2, K=32768, seed=52",
+  "query_protocol": "200 held-out document vectors; exhaustive normalized float64 GT; same queries used to tune nprobe/rerank; 10 queries per filter",
+  "cache": "sync and drop_caches=3 before every request",
+  "query_threads": 1,
+  "cgroup_limit_bytes": 999997440,
+  "swap": 0,
+  "source_anchor_sha256": "90ac17dbcfa5eeaf8655cd11db7c6ce20eb677e6991772714c7b8fc6f6df6b8f",
+  "configs": [
+    {
+      "nprobe": 32,
+      "rerank": 2000,
+      "summary": {
+        "None": {
+          "queries": 200,
+          "recall": 0.9690000000000001,
+          "p50_ms": 24.60292645264417,
+          "p95_ms": 45.969140494707965,
+          "delta_cos": 6.191794090717018e-05
+        },
+        "common_tld": {
+          "queries": 10,
+          "recall": 0.97,
+          "p50_ms": 24.27842898759991,
+          "p95_ms": 42.976116680074455,
+          "delta_cos": 3.933458524192357e-05
+        },
+        "other_tld": {
+          "queries": 10,
+          "recall": 0.9800000000000001,
+          "p50_ms": 16.869277926161885,
+          "p95_ms": 35.63946937210856,
+          "delta_cos": 2.6586935099026653e-05
+        },
+        "rare_tld": {
+          "queries": 10,
+          "recall": 0.8099999999999999,
+          "p50_ms": 8.535362896509469,
+          "p95_ms": 21.90877839457242,
+          "delta_cos": 0.0008941820766639075
+        },
+        "length_range": {
+          "queries": 10,
+          "recall": 0.97,
+          "p50_ms": 44.59332057740539,
+          "p95_ms": 67.5653521553613,
+          "delta_cos": 2.300941006806445e-05
+        },
+        "conjunction": {
+          "queries": 10,
+          "recall": 0.97,
+          "p50_ms": 39.0542735112831,
+          "p95_ms": 57.903303648345144,
+          "delta_cos": 4.2753571617548666e-05
+        },
+        "tld_regex": {
+          "queries": 10,
+          "recall": 0.9800000000000001,
+          "p50_ms": 18.3267641114071,
+          "p95_ms": 35.74091134360058,
+          "delta_cos": 3.5631579823003356e-05
+        }
+      }
+    },
+    {
+      "nprobe": 64,
+      "rerank": 2000,
+      "summary": {
+        "None": {
+          "queries": 200,
+          "recall": 0.978,
+          "p50_ms": 32.98165649175644,
+          "p95_ms": 57.48354374663903,
+          "delta_cos": 1.1202636395524768e-05
+        },
+        "common_tld": {
+          "queries": 10,
+          "recall": 0.99,
+          "p50_ms": 31.13724896684289,
+          "p95_ms": 50.24836336961013,
+          "delta_cos": 4.4912122560969435e-07
+        },
+        "other_tld": {
+          "queries": 10,
+          "recall": 1.0,
+          "p50_ms": 23.30432110466063,
+          "p95_ms": 40.3667368693277,
+          "delta_cos": 4.410439125024368e-10
+        },
+        "rare_tld": {
+          "queries": 10,
+          "recall": 0.9099999999999999,
+          "p50_ms": 13.552232063375413,
+          "p95_ms": 27.873068128246793,
+          "delta_cos": 0.00027964490054069866
+        },
+        "length_range": {
+          "queries": 10,
+          "recall": 0.99,
+          "p50_ms": 60.63975510187447,
+          "p95_ms": 82.93279866920781,
+          "delta_cos": 5.839006129626511e-06
+        },
+        "conjunction": {
+          "queries": 10,
+          "recall": 0.99,
+          "p50_ms": 49.19842001982033,
+          "p95_ms": 68.72750872280446,
+          "delta_cos": 6.438418178122962e-06
+        },
+        "tld_regex": {
+          "queries": 10,
+          "recall": 1.0,
+          "p50_ms": 25.664282380603254,
+          "p95_ms": 43.94048098474738,
+          "delta_cos": 0.0
+        }
+      }
+    },
+    {
+      "nprobe": 64,
+      "rerank": 4000,
+      "summary": {
+        "None": {
+          "queries": 200,
+          "recall": 0.9919999999999999,
+          "p50_ms": 42.58992848917842,
+          "p95_ms": 65.56253264425321,
+          "delta_cos": 4.063663978211007e-06
+        },
+        "common_tld": {
+          "queries": 10,
+          "recall": 0.99,
+          "p50_ms": 42.34624747186899,
+          "p95_ms": 61.941548599861534,
+          "delta_cos": 4.4912122560969435e-07
+        },
+        "other_tld": {
+          "queries": 10,
+          "recall": 1.0,
+          "p50_ms": 34.4429180258885,
+          "p95_ms": 51.61659274017436,
+          "delta_cos": 4.410439125024368e-10
+        },
+        "rare_tld": {
+          "queries": 10,
+          "recall": 0.9099999999999999,
+          "p50_ms": 13.080166419968009,
+          "p95_ms": 28.66445321124045,
+          "delta_cos": 0.00027964490054069866
+        },
+        "length_range": {
+          "queries": 10,
+          "recall": 0.99,
+          "p50_ms": 66.58828351646662,
+          "p95_ms": 88.4256471530534,
+          "delta_cos": 5.839006129626511e-06
+        },
+        "conjunction": {
+          "queries": 10,
+          "recall": 0.99,
+          "p50_ms": 57.83545540180057,
+          "p95_ms": 77.68388139083979,
+          "delta_cos": 6.438418178122962e-06
+        },
+        "tld_regex": {
+          "queries": 10,
+          "recall": 1.0,
+          "p50_ms": 36.449878476560116,
+          "p95_ms": 53.53365334449334,
+          "delta_cos": 0.0
+        }
+      }
+    }
+  ]
+}
