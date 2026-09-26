@@ -1,0 +1,83 @@
+{
+  "protocol": {
+    "rows": 1000000,
+    "dim": 768,
+    "queries": 128,
+    "nprobe": 1536,
+    "rerank": 400,
+    "cell_capacity": 2048,
+    "batch": 256,
+    "ingest_cpu": 7,
+    "search_cpu": 8,
+    "source": "/root/fissiondb-qdrant50m/base.f16bin",
+    "query_file": "/root/fissiondb-qdrant50m/queries/queries.npy",
+    "truth_file": "/root/fissiondb-qdrant50m/queries/gt-1000000.npz",
+    "cache": "Engine defaults, no eviction; fresh collection, concurrent then quiescent queries.",
+    "query_sha256": "f0e97374e69a7a5af3eee5954aa31d81e4be804b75064e1341b636907a7e7e9c",
+    "truth_sha256": "7659e1c0825ff868b6ece62615541cc42e6994a5250e284fb45999e1006caaa9",
+    "source_size": 76800000008,
+    "source_mtime_ns": 1790440063220248308,
+    "limits": {
+      "memory.max": "1999998976",
+      "memory.swap.max": "0"
+    },
+    "metadata": "none",
+    "rebuild": true,
+    "source_prefix_sha256": "d8fcd32d07914c2e38bdf181ff0ee03eb9c5be59f973a58bc14688083308350b"
+  },
+  "ingestion_seconds": 227.7937938789837,
+  "tail_ingestion_seconds": 136.42054048273712,
+  "recall_at_10": 0.99765625,
+  "quiescent": {
+    "n": 128,
+    "p50_ms": 85.41459729894996,
+    "p95_ms": 104.84131348785012,
+    "p99_ms": 106.38081882614642,
+    "max_ms": 107.3509301058948
+  },
+  "concurrent": {
+    "n": 1251,
+    "p50_ms": 107.80822113156319,
+    "p95_ms": 122.58210522122681,
+    "p99_ms": 128.51602118462324,
+    "max_ms": 508.93260817974806
+  },
+  "state": {
+    "allocated_count": 1000000,
+    "deleted_count": 0,
+    "maintenance_bytes": 0,
+    "journal_bytes": 4176000064,
+    "idempotency_records": 0,
+    "active_count": 1000000,
+    "fission": {
+      "cells": 1398,
+      "splits": 1396,
+      "rewritten": 2983188,
+      "records": 1000000,
+      "largest_cell": 2046,
+      "owned_bytes": 2206144,
+      "arena_bytes": 238780416,
+      "max_cells": 300000,
+      "split_total_ms": 212417.2034444809,
+      "split_max_ms": 914.3095750808716,
+      "last_split_ms": 205.75549602508545,
+      "pending_cells": 0,
+      "preparing": 0,
+      "queries_during_prepare": 1241,
+      "delta_records": 4906,
+      "backpressure_waits": 257,
+      "scratch_bytes": 0,
+      "peak_scratch_bytes": 11811584,
+      "publishes": 1396,
+      "publish_total_ms": 3.224121570587158,
+      "publish_max_ms": 0.1274728775024414,
+      "last_publish_ms": 0.0005121231079101562
+    }
+  },
+  "resources": {
+    "memory.peak": "1999998976",
+    "memory.max": "1999998976",
+    "memory.events": "low 0\nhigh 0\nmax 42200\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "0"
+  }
+}

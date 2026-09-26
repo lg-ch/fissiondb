@@ -1,0 +1,23 @@
+{
+  "variant": "baseline",
+  "library_sha256": "7f02bd2ca7aa413456519d2ad9f8b59c2dfc951dd09ba030a7687a619b744753",
+  "protocol": "Original reused 600 MS MARCO validation queries, unchanged 113520750 x 1024 frozen index, 200k representatives, 1536 probes/400 reranks. CPU5, 1GB cgroup/swap0, fadvise before each query, direct overlapped codes, no ingestion. Hardware caches not flushed; separate transfer remains active.",
+  "recall_at_10": 0.9625,
+  "p50_ms": 54.83122309669852,
+  "p95_ms": 64.53979802317917,
+  "mean_stages": {
+    "anchor_ms": 7.745435924530029,
+    "io_ms": 9.673674481709797,
+    "score_ms": 34.75729820092519,
+    "rerank_ms": 2.170546023050944,
+    "total_ms": 54.40433219114939,
+    "entries": 1845177.5033333334,
+    "bytes": 138387415.04
+  },
+  "resources": {
+    "memory.max": "999997440",
+    "memory.peak": "999997440",
+    "memory.events": "low 0\nhigh 0\nmax 282\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "0"
+  }
+}

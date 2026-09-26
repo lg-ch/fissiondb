@@ -1,0 +1,91 @@
+{
+  "protocol": {
+    "rows": 1000000,
+    "dim": 768,
+    "queries": 128,
+    "nprobe": 1536,
+    "rerank": 400,
+    "cell_capacity": 2048,
+    "batch": 256,
+    "ingest_cpu": 7,
+    "search_cpu": 8,
+    "source": "/root/fissiondb-qdrant50m/base.f16bin",
+    "query_file": "/root/fissiondb-qdrant50m/queries/queries.npy",
+    "truth_file": "/root/fissiondb-qdrant50m/queries/gt-1000000.npz",
+    "cache": "Engine defaults, no eviction; fresh collection, concurrent then quiescent queries.",
+    "query_sha256": "f0e97374e69a7a5af3eee5954aa31d81e4be804b75064e1341b636907a7e7e9c",
+    "truth_sha256": "7659e1c0825ff868b6ece62615541cc42e6994a5250e284fb45999e1006caaa9",
+    "source_size": 76800000008,
+    "source_mtime_ns": 1790440063220248308,
+    "limits": {
+      "memory.max": "1999998976",
+      "memory.swap.max": "0"
+    },
+    "metadata": "none",
+    "rebuild": true,
+    "source_prefix_sha256": "d8fcd32d07914c2e38bdf181ff0ee03eb9c5be59f973a58bc14688083308350b"
+  },
+  "ingestion_seconds": 236.24792260676622,
+  "tail_ingestion_seconds": 162.37092841323465,
+  "recall_at_10": 0.9984375,
+  "quiescent": {
+    "n": 128,
+    "p50_ms": 76.28771220333874,
+    "p95_ms": 78.47864683717488,
+    "p99_ms": 81.62212737370282,
+    "max_ms": 82.15540368109941
+  },
+  "concurrent": {
+    "n": 2011,
+    "p50_ms": 75.10377280414104,
+    "p95_ms": 104.83229602687061,
+    "p99_ms": 110.10994291864336,
+    "max_ms": 123.3461881056428
+  },
+  "state": {
+    "allocated_count": 1000000,
+    "deleted_count": 0,
+    "maintenance_bytes": 0,
+    "journal_bytes": 4176000064,
+    "idempotency_records": 0,
+    "active_count": 1000000,
+    "fission": {
+      "cells": 1358,
+      "splits": 1356,
+      "rewritten": 2827459,
+      "records": 1000000,
+      "largest_cell": 2048,
+      "owned_bytes": 2206192,
+      "arena_bytes": 221319168,
+      "max_cells": 300000,
+      "split_total_ms": 155938.19457149506,
+      "split_max_ms": 844.6409111022949,
+      "last_split_ms": 157.50891876220703,
+      "pending_cells": 0,
+      "preparing": 0,
+      "queries_during_prepare": 1206,
+      "delta_records": 4461,
+      "backpressure_waits": 75,
+      "scratch_bytes": 0,
+      "peak_scratch_bytes": 11811584,
+      "publishes": 1356,
+      "publish_total_ms": 3.097167491912842,
+      "publish_max_ms": 0.20459270477294922,
+      "last_publish_ms": 0.00043201446533203125
+    }
+  },
+  "resources": {
+    "memory.peak": "1999998976",
+    "memory.max": "1999998976",
+    "memory.events": "low 0\nhigh 0\nmax 128023\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "0"
+  },
+  "regression_gate": {
+    "passed": true,
+    "failures": [],
+    "baseline": "/root/fission-live-controlled-20260926/baseline/report.json",
+    "max_p50_ratio": 1.1,
+    "max_p95_ratio": 1.2,
+    "max_recall_drop": 0.005
+  }
+}
