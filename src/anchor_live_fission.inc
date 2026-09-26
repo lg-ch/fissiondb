@@ -24,7 +24,7 @@ typedef struct LiveFission {
     uint8_t* queued;
     uint32_t queue_head,queue_tail,pending,active,pressure;
     pthread_t worker;
-    pthread_mutex_t work_mutex,job_mutex;
+    pthread_mutex_t work_mutex,job_mutex,publish_mutex;
     pthread_cond_t work_cond;
     int started,stop,wakeup,rebuilding;
     uint64_t epoch,queries_during_prepare,delta_records,pressure_waits,publishes;
@@ -239,7 +239,7 @@ int anchor_live_enable_fission(AnchorLive*l,uint32_t cap,uint32_t maximum,const 
     if(!l||l->fission||l->dim>1024||cap<64||cap>65536||maximum<2||maximum>1000000||!ops||!ops->dot||!ops->encode||!ops->sketch)return -1;
     LiveFission*f=calloc(1,sizeof(*f));if(!f)return -1;f->fd=f->direct_fd=-1;f->free_head=FISSION_NONE;f->ops=*ops;f->user=user;f->cap=cap;f->maximum=maximum;
     f->queue_head=f->queue_tail=f->active=FISSION_NONE;
-    pthread_mutex_init(&f->work_mutex,NULL);pthread_mutex_init(&f->job_mutex,NULL);pthread_cond_init(&f->work_cond,NULL);
+    pthread_mutex_init(&f->work_mutex,NULL);pthread_mutex_init(&f->job_mutex,NULL);pthread_mutex_init(&f->publish_mutex,NULL);pthread_cond_init(&f->work_cond,NULL);
     pthread_rwlock_wrlock(&l->lock);int rc=-1;if(l->poisoned)goto done;l->fission=f;
     f->fd=openat(l->dir_fd,"fission.codes",O_RDWR|O_CREAT|O_NOFOLLOW,0600);if(f->fd<0)goto done;
     f->direct_fd=openat(l->dir_fd,"fission.codes",O_RDONLY|O_DIRECT|O_NOFOLLOW);
@@ -255,7 +255,7 @@ int anchor_live_enable_fission(AnchorLive*l,uint32_t cap,uint32_t maximum,const 
     if(fission_worker_start(l))goto done;
     rc=0;
 done:
-    if(rc){l->fission=NULL;if(f->fd>=0)close(f->fd);if(f->direct_fd>=0)close(f->direct_fd);free(f->cells);free(f->chunks);free(f->centers);free(f->scales);free(f->queue_next);free(f->queued);pthread_cond_destroy(&f->work_cond);pthread_mutex_destroy(&f->work_mutex);pthread_mutex_destroy(&f->job_mutex);free(f);}
+    if(rc){l->fission=NULL;if(f->fd>=0)close(f->fd);if(f->direct_fd>=0)close(f->direct_fd);free(f->cells);free(f->chunks);free(f->centers);free(f->scales);free(f->queue_next);free(f->queued);pthread_cond_destroy(&f->work_cond);pthread_mutex_destroy(&f->work_mutex);pthread_mutex_destroy(&f->job_mutex);pthread_mutex_destroy(&f->publish_mutex);free(f);}
     pthread_rwlock_unlock(&l->lock);return rc;
 }
 static void live_fission_close(AnchorLive*l){
@@ -265,7 +265,7 @@ static void live_fission_close(AnchorLive*l){
     if(f->fd>=0)close(f->fd);
     if(f->direct_fd>=0)close(f->direct_fd);
     free(f->cells);free(f->chunks);free(f->centers);free(f->scales);free(f->queue_next);free(f->queued);
-    pthread_cond_destroy(&f->work_cond);pthread_mutex_destroy(&f->work_mutex);pthread_mutex_destroy(&f->job_mutex);free(f);l->fission=NULL;
+    pthread_cond_destroy(&f->work_cond);pthread_mutex_destroy(&f->work_mutex);pthread_mutex_destroy(&f->job_mutex);pthread_mutex_destroy(&f->publish_mutex);free(f);l->fission=NULL;
 }
 int anchor_live_has_fission(const AnchorLive*l){return l&&l->fission;}
 static uint64_t live_fission_end(const AnchorLive*l){return l->fission?l->fission->checkpoint_end:0;}
@@ -280,3 +280,5 @@ int anchor_live_fission_stats(AnchorLive*l,uint64_t v[8],double t[3]){
 #include "anchor_live_fission_io.inc"
 
 #include "anchor_live_fission_async.inc"
+
+#include "anchor_live_fission_ingest.inc"

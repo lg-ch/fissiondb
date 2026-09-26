@@ -62,7 +62,7 @@ struct AnchorLive {
     int pack_fd;
     uint64_t pack_end;
     uint64_t* pack_offsets;
-    pthread_mutex_t pack_lock;
+    pthread_mutex_t pack_lock,writer_mutex;
     pthread_rwlock_t lock;
     struct LiveFission* fission;
 };
@@ -75,6 +75,7 @@ static uint64_t live_fission_end(const AnchorLive*);
 static void live_vector_write_lock(AnchorLive*);
 static void live_fission_maintenance_lock(AnchorLive*);
 static void live_fission_maintenance_unlock(AnchorLive*);
+static int live_append_fission_batch(AnchorLive*,int,const float*,const uint32_t*,const char* const*,const int*,const uint8_t* const*,const uint8_t* const*,uint32_t*,int*);
 static int write_all(int fd, const void* data, size_t n, uint64_t off) {
     const char* p=data;
     while(n) {
@@ -179,7 +180,7 @@ int anchor_live_lookup(AnchorLive* l,const uint8_t* token,const uint8_t* digest,
     if(r){rc=memcmp(r->digest,digest,32)?-3:1;if(rc==1)*id=r->id;}
     anchor_live_read_unlock(l);return rc;
 }
-static int apply_record(AnchorLive* l,LiveRecord* r,uint64_t offset) {
+static int apply_record_impl(AnchorLive* l,LiveRecord* r,uint64_t offset,int prepared) {
     const char* keys[TAG_COUNT_MAX];
     if(r->kind==8) {
         /* Allocation tombstone: retain ID continuity without deleted vectors. */
@@ -238,16 +239,17 @@ static int apply_record(AnchorLive* l,LiveRecord* r,uint64_t offset) {
             Override* u=override_find(l,r->id);
             if(!u){u=calloc(1,sizeof(*u));if(!u)return -1;u->id=r->id;u->next=l->overrides[r->id%4096];l->overrides[r->id%4096]=u;l->override_count++;}
             u->offset=offset;
-        }else if(write_all(l->rows_fd,vector,vector_bytes,l->count*vector_bytes))return -1;
+        }else if(!prepared&&write_all(l->rows_fd,vector,vector_bytes,l->count*vector_bytes))return -1;
         for(int i=0;i<l->copies;i++)l->heads[r->cells[i]]=offset;
         if(r->kind!=7)l->count++;
     } else if(r->id>=l->base_n+l->count)return -1;
     if(extra&&request_add(l,r->id,(uint8_t*)(r+1)+vector_bytes,(uint8_t*)(r+1)+vector_bytes+32))return -1;
     int rc=replace_tags(l,r->id,keys,(int)r->nkeys,r->kind==2||r->kind==7);
     if(!rc&&(r->kind==2||r->kind==7))l->maintenance_bytes+=r->bytes;
-    if(!rc&&is_vector&&l->fission)rc=live_fission_observe(l,r,offset);
+    if(!rc&&is_vector&&l->fission&&!prepared)rc=live_fission_observe(l,r,offset);
     return rc;
 }
+static int apply_record(AnchorLive*l,LiveRecord*r,uint64_t offset){return apply_record_impl(l,r,offset,0);}
 void anchor_live_close(AnchorLive* l) {
     if(!l)return;
     live_fission_close(l);
@@ -264,13 +266,13 @@ void anchor_live_close(AnchorLive* l) {
     }
     for(int b=0;b<4096;b++)for(Override* u=l->overrides[b];u;){Override* next=u->next;free(u);u=next;}
     if(l->deleted)roaring_bitmap_free(l->deleted);
-    free(l->heads);pthread_rwlock_destroy(&l->lock);free(l);
+    free(l->heads);pthread_rwlock_destroy(&l->lock);pthread_mutex_destroy(&l->writer_mutex);free(l);
 }
 AnchorLive* anchor_live_open(const char* dir,uint64_t fingerprint,uint64_t base_n,int dim,int cells,int copies) {
     if(!dir||dim<8||cells<1||copies<1||copies>4||copies>cells||base_n>=UINT32_MAX)return NULL;
     if(mkdir(dir,0755) && errno!=EEXIST)return NULL;
     AnchorLive* l=calloc(1,sizeof(*l));if(!l)return NULL;
-    l->log_fd=l->rows_fd=l->dir_fd=l->lock_fd=l->pack_fd=-1;pthread_rwlock_init(&l->lock,NULL);pthread_mutex_init(&l->pack_lock,NULL);
+    l->log_fd=l->rows_fd=l->dir_fd=l->lock_fd=l->pack_fd=-1;pthread_rwlock_init(&l->lock,NULL);pthread_mutex_init(&l->pack_lock,NULL);pthread_mutex_init(&l->writer_mutex,NULL);
     l->base_n=base_n;l->dim=dim;l->cells=cells;l->copies=copies;
     l->heads=calloc((size_t)cells,8);l->deleted=roaring_bitmap_create();
     if(!l->heads||!l->deleted)goto fail;
@@ -341,7 +343,7 @@ static int commit_record(AnchorLive* l,const float* vector,const uint32_t* cells
     if(token){memcpy((char*)(r+1)+vector_bytes,token,32);memcpy((char*)(r+1)+vector_bytes+32,digest,32);}
     char* dest=(char*)(r+1)+vector_bytes+(token?64:0);
     for(int i=0;i<nkeys;i++){size_t n=strlen(keys[i])+1;memcpy(dest,keys[i],n);dest+=n;}
-    if(!locked){if(vector)live_vector_write_lock(l);else pthread_rwlock_wrlock(&l->lock);}
+    if(!locked){pthread_mutex_lock(&l->writer_mutex);if(vector)live_vector_write_lock(l);else pthread_rwlock_wrlock(&l->lock);}
     int rc=-1;
     if(l->poisoned)goto done;
     if(token) {
@@ -370,12 +372,12 @@ static int commit_record(AnchorLive* l,const float* vector,const uint32_t* cells
     }
     l->end+=bytes;if(output)*output=r->id;rc=0;
 done:
-    if(!locked)pthread_rwlock_unlock(&l->lock);
+    if(!locked){pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&l->writer_mutex);}
     free(r);return rc;
 }
 int anchor_live_append(AnchorLive* l,const float* vector,const uint32_t* cells,const char* const* keys,int nkeys,uint32_t* id) {
     if(!vector||!id)return -1;
-    return commit_record(l,vector,cells,0,keys,nkeys,id,NULL,NULL,0,0,1);
+    int committed=0;return anchor_live_append_batch(l,1,vector,cells,keys,&nkeys,NULL,NULL,id,&committed);
 }
 /* Bounded posting import, visible under one write lock. A crash can retain
  * a prefix of key records; idempotent set union makes a full retry safe. */
@@ -399,6 +401,7 @@ int anchor_live_add_tag(AnchorLive* l,const uint32_t* ids,int n,const char* cons
     }
     LiveRecord* record=malloc(sizeof(LiveRecord)+256+(size_t)n*4);
     if(!record){free(data);return -1;}
+    pthread_mutex_lock(&l->writer_mutex);
     pthread_rwlock_wrlock(&l->lock);int rc=-1;
     if(l->poisoned)goto done;
     for(int i=0;i<n;i++)if(ids[i]>=l->base_n+l->count||anchor_live_is_deleted(l,ids[i]))goto done;
@@ -417,7 +420,7 @@ int anchor_live_add_tag(AnchorLive* l,const uint32_t* ids,int n,const char* cons
     }
     l->end+=total;rc=0;
 done:
-    pthread_rwlock_unlock(&l->lock);free(record);free(data);return rc;
+    pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&l->writer_mutex);free(record);free(data);return rc;
 }
 int anchor_live_set_tags(AnchorLive* l,uint32_t id,const char* const* keys,int nkeys) {
     return commit_record(l,NULL,NULL,id,keys,nkeys,NULL,NULL,NULL,0,0,1);
@@ -425,21 +428,15 @@ int anchor_live_set_tags(AnchorLive* l,uint32_t id,const char* const* keys,int n
 int anchor_live_append_once(AnchorLive* l,const float* v,const uint32_t* cells,
     const char* const* keys,int nkeys,const uint8_t* token,const uint8_t* digest,uint32_t* id) {
     if(!v||!token||!digest||!id)return -1;
-    return commit_record(l,v,cells,0,keys,nkeys,id,token,digest,0,0,1);
+    const uint8_t*ts[]={token},*ds[]={digest};int committed=0;
+    return anchor_live_append_batch(l,1,v,cells,keys,&nkeys,ts,ds,id,&committed);
 }
 int anchor_live_update(AnchorLive* l,uint32_t id,const float* vector,const uint32_t* cells,const char* const* keys,int nkeys) {
     if(!vector)return -1;
     return commit_record(l,vector,cells,id,keys,nkeys,NULL,NULL,NULL,1,0,1);
 }
-int anchor_live_append_batch(AnchorLive* l,int n,const float* vectors,const uint32_t* cells,const char* const* keys,const int* counts,const uint8_t* const* tokens,const uint8_t* const* digests,uint32_t* ids,int* committed) {
-    if(!l||n<1||n>256||!vectors||!cells||!counts||!ids||!committed)return -1;
-    *committed=0;int total=0;
-    for(int i=0;i<n;i++){if(counts[i]<0||counts[i]>TAG_COUNT_MAX||(counts[i]&&!keys))return -1;
-        if(tokens&&tokens[i]&&(!digests||!digests[i]))return -1;
-        size_t bytes=0;for(int j=0;j<counts[i];j++){if(!key_valid(keys[total+j]))return -1;bytes+=strlen(keys[total+j])+1;}
-        if(bytes>TAG_BYTES_MAX)return -1;
-        total+=counts[i];}
-    live_vector_write_lock(l);int rc=-1,applied=0;total=0;
+static int live_append_batch_locked(AnchorLive* l,int n,const float* vectors,const uint32_t* cells,const char* const* keys,const int* counts,const uint8_t* const* tokens,const uint8_t* const* digests,uint32_t* ids,int* committed) {
+    int rc=-1,applied=0,total=0;
     if(l->poisoned)goto done;
     for(int i=0;i<n;i++){
         rc=commit_record(l,vectors+(size_t)i*l->dim,cells+(size_t)i*l->copies,0,keys?keys+total:NULL,counts[i],ids+i,tokens?tokens[i]:NULL,digests?digests[i]:NULL,0,1,0);
@@ -450,10 +447,25 @@ int anchor_live_append_batch(AnchorLive* l,int n,const float* vectors,const uint
     if(fsync(l->log_fd)||fsync(l->rows_fd)){l->poisoned=1;rc=-1;goto done;}
     *committed=applied;
 done:
-    pthread_rwlock_unlock(&l->lock);return rc;
+    return rc;
 }
+int anchor_live_append_batch(AnchorLive* l,int n,const float* vectors,const uint32_t* cells,const char* const* keys,const int* counts,const uint8_t* const* tokens,const uint8_t* const* digests,uint32_t* ids,int* committed) {
+    if(!l||n<1||n>256||!vectors||!cells||!counts||!ids||!committed)return -1;
+    *committed=0;int total=0;
+    for(int i=0;i<n;i++){if(counts[i]<0||counts[i]>TAG_COUNT_MAX||(counts[i]&&!keys))return -1;
+        if(tokens&&tokens[i]&&(!digests||!digests[i]))return -1;
+        size_t bytes=0;for(int j=0;j<counts[i];j++){if(!key_valid(keys[total+j]))return -1;bytes+=strlen(keys[total+j])+1;}
+        if(bytes>TAG_BYTES_MAX)return -1;
+        total+=counts[i];}
+    if(l->fission)return live_append_fission_batch(l,n,vectors,cells,keys,counts,tokens,digests,ids,committed);
+    pthread_mutex_lock(&l->writer_mutex);live_vector_write_lock(l);
+    int rc=live_append_batch_locked(l,n,vectors,cells,keys,counts,tokens,digests,ids,committed);
+    pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&l->writer_mutex);return rc;
+}
+
 int anchor_live_delete(AnchorLive* l,uint32_t id) {
     if(!l)return -1;
+    pthread_mutex_lock(&l->writer_mutex);
     pthread_rwlock_wrlock(&l->lock);int rc=-1;
     if(l->poisoned||(uint64_t)id>=l->base_n+l->count)goto done;
     if(anchor_live_is_deleted(l,id)){rc=0;goto done;}
@@ -466,7 +478,7 @@ int anchor_live_delete(AnchorLive* l,uint32_t id) {
     }
     l->end+=sizeof(buffer);rc=0;
 done:
-    pthread_rwlock_unlock(&l->lock);return rc;
+    pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&l->writer_mutex);return rc;
 }
 uint64_t anchor_live_journal_bytes(const AnchorLive* l){return l?l->end:0;}
 uint64_t anchor_live_request_count(const AnchorLive* l){return l?l->request_count:0;}
@@ -476,6 +488,7 @@ uint64_t anchor_live_deleted_count(const AnchorLive* l){return l?roaring_bitmap_
    all contexts on one generation. Scratch space is O(cells + one record). */
 int anchor_live_compact(AnchorLive* l,uint64_t* before,uint64_t* after) {
     if(!l||!before||!after)return -1;
+    pthread_mutex_lock(&l->writer_mutex);
     live_fission_maintenance_lock(l);
     pthread_rwlock_wrlock(&l->lock);
     int rc=-1,fd=-1,rows_new=-1,published=0;
@@ -625,7 +638,7 @@ done:
     if(!published&&l->dir_fd>=0)unlinkat(l->dir_fd,".live.compact",0);
     if(rows_new>=0)close(rows_new);
     if(l->dir_fd>=0)unlinkat(l->dir_fd,".rows.compact",0);
-    free(heads);free(record);pthread_rwlock_unlock(&l->lock);live_fission_maintenance_unlock(l);return rc;
+    free(heads);free(record);pthread_rwlock_unlock(&l->lock);live_fission_maintenance_unlock(l);pthread_mutex_unlock(&l->writer_mutex);return rc;
 }
 
 int anchor_live_keys(AnchorLive* l,char* dst,int cap) {

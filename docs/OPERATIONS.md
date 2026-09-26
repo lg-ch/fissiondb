@@ -192,3 +192,55 @@ Concurrency tests pause a worker with unpublished daughters and require reads,
 writes and deletions to remain visible; they also exercise crashes and worker
 failure while a writer is waiting for backpressure to clear.
 Small-corpus correctness tests do not establish large-corpus recall or throughput.
+
+Adaptive IO tests compare IDs and scores across unit/grouped reads, overlap on
+and off, and buffered/direct reads. They also corrupt a code while another
+batch is in flight and check that all IO drains before the context closes.
+Append concurrency tests pause before writing and after durability but before
+publication: searches must complete against the old state, then include the
+new records after acknowledgment. Crash/failure tests verify journal recovery.
+
+### Rebuild-based performance regression gate
+
+Run `tests/bench_live_regression.py` on both revisions using the same host,
+CPU pair, memory cgroup and input files. Each run refuses an existing output
+directory and builds a fresh adaptive index. The last quarter is ingested with
+a concurrent reader; a quiescent pass then measures recall against exact GT for
+the complete selected prefix. Concurrent prefix queries are not compared to
+full-corpus GT. For example, with externally supplied real embeddings:
+
+```sh
+PYTHONPATH=scripts python tests/bench_live_regression.py \
+  --source /data/base.f16bin --queries /data/queries.npy \
+  --truth /data/gt-1000000.npz --rows 1000000 \
+  --ingest-cpu 0 --search-cpu 1 --output /results/baseline
+# Switch/build the candidate revision, then use a different output directory:
+PYTHONPATH=scripts python tests/bench_live_regression.py \
+  --source /data/base.f16bin --queries /data/queries.npy \
+  --truth /data/gt-1000000.npz --rows 1000000 \
+  --ingest-cpu 0 --search-cpu 1 --output /results/candidate \
+  --baseline /results/baseline/report.json
+```
+
+The default gate fails if mean recall@10 drops by more than 0.005, median latency
+increases by more than 10%, or p95 increases by more than 20%, in either the
+quiescent or concurrent pass. Thresholds are explicit command-line options.
+Use an external cgroup (for example `MemoryMax=2000000000`, `MemorySwapMax=0`)
+and avoid other disk-intensive work when establishing performance baselines.
+There is no forced cache eviction in this gate. Different rebuilds may produce
+slightly different split topologies; the correctness suite separately requires
+identical query results across IO schedules on the same index.
+
+The GitHub Actions workflow **Rebuilt live performance comparison** runs on
+engine pull requests and can also be dispatched manually with a baseline ref. It
+rebuilds both revisions on a seeded 65,536-vector fixture with independent
+queries and exhaustive FP64 GT. It enforces the same 2 GB cgroup for both runs.
+Its 25% median / 50% p95 tolerance accounts for shared-runner noise; dedicated
+real-corpus measurements should use the stricter defaults above. Regular CI
+runs the deterministic IO scheduling and publication correctness checks.
+
+For adaptive queries, `stats['live']` reports the direct lock-wait timer, routing,
+IO submit/wait, code scoring and reranking, plus read/submission/overlap counts.
+IO time includes rerank waits and overlaps scoring, so these timers are not an
+additive wall-time breakdown. The legacy `rerank_ms` field still aggregates the
+adaptive live path; use `stats['live']` to diagnose it.

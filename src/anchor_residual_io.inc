@@ -14,7 +14,8 @@ int anchor_query_residual_io(AnchorQuery* c,int width,int overlap,int direct) {
     if(!c||c->failed||c->index->residual_fd<0||width<1||width>256||
        (overlap!=0&&overlap!=1)||(direct!=0&&direct!=1)||
        (direct&&c->index->residual_direct_fd<0))return -1;
-    c->res_width=width;c->res_overlap=overlap;c->res_direct=direct;return 0;
+    c->res_width=width;c->res_overlap=overlap;
+    c->res_direct=c->res_live_direct=direct;return 0;
 }
 static uint64_t residual_read_length(const AnchorQuery* c,uint32_t cell){
     const AnchorIndex* idx=c->index;int entry=residual_source_entry(idx);

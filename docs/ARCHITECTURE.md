@@ -26,9 +26,13 @@ request per selected cell, with direct reads aligned to 4 KiB. It overlaps the
 next batch of up to 64 cells with scoring the current batch. Device or filesystem
 layers may split a logical request into multiple physical operations.
 
-Live cells use linked chunks of 512 records, read through buffered `pread` calls.
-The live reader currently reads chunks serially; it does not yet use the frozen
-reader's overlapping IO batches. Frozen and live cells are routed independently.
+Adaptive live cells use linked chunks of 512 records. Their reader reuses the
+query's aligned buffers and io_uring queue: up to 64 chunk reads per batch, with
+the next batch in flight during scoring. Adaptive chunks use buffered reads by
+default; direct IO is available explicitly. Direct reads include boundary pages;
+only published used records are scored and checksum-validated. Live reranking
+also batches journal reads. `residual_io()` configures both frozen and adaptive
+live reads. Frozen and live cells are routed independently.
 
 Candidate IDs are deduplicated before exact reranking. The default rerank budget
 is 400 per source. Exact scoring uses stored float16 originals for frozen vectors
@@ -93,8 +97,26 @@ Once the worker has caught up, a short write lock swaps the cell descriptors and
 representatives. Acquiring that lock waits out readers of the previous version;
 old chunks remain intact until a later durable checkpoint. A query therefore
 sees a consistent topology. Preparation overlaps queries and ingestion; this is
-not a lock-free engine. Journal commits, chunk reservation, publication,
-checkpointing and compaction still need synchronized sections.
+not a lock-free engine. Chunk reservation, publication, checkpointing and
+compaction still need synchronized sections.
+
+After initial bootstrap, insertions prepare bounded batches of at most 256
+vectors. Routing and residual encoding run under a shared read lock; journal,
+row and unpublished code writes and their durability barriers run without the
+live write lock. A writer mutex serializes journal mutations. A separate
+publication mutex pins representatives and protects reserved slots from
+checkpoint reclamation, while the split worker can continue preparing daughters.
+After the journal and rows are durable, a short write section publishes counts,
+metadata and chunk descriptors together. Queries see the previous committed
+state until publication, and acknowledged inserts are searchable immediately.
+The existing journal format and recovery rules are unchanged; durable but
+unacknowledged inserts may be recovered after a crash.
+
+Readers still hold a shared live lock during retrieval. A publisher can wait
+for those readers, and readers can wait for reservation/publication. Initial
+bootstrap, updates, metadata mutations, deletes and maintenance still have
+exclusive sections. This change removes expensive insertion routing and fsync
+from the reader exclusion period; it does not eliminate all synchronization.
 
 Only one cell is prepared at a time. A parent exceeding capacity plus 256
 assignments pauses subsequent vector writes until the worker makes progress;

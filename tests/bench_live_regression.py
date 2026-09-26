@@ -7,14 +7,16 @@ Every invocation creates a NEW collection; it refuses to reuse an old one.
 import os
 os.environ.update(OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
 import argparse
-from collections import deque
+import hashlib
 import json
 from pathlib import Path
+import platform
 import struct
 import threading
 import time
 import numpy as np
 from fissiondb import AnchorIndex
+from fissiondb.anchors import _lib
 
 p=argparse.ArgumentParser(description=__doc__)
 for flag in ('source','queries','truth','output'):p.add_argument('--'+flag,required=True)
@@ -32,12 +34,17 @@ queries=np.load(args.queries)[:args.query_count].astype(np.float32)
 truth=np.load(args.truth)['ids'][:len(queries),:10]
 with open(args.source,'rb') as f:n,dim=struct.unpack('<II',f.read(8))
 assert n>=args.rows and queries.shape[1]==dim and truth.shape==(len(queries),10)
+cg=Path('/sys/fs/cgroup')/Path('/proc/self/cgroup').read_text().strip().split('::')[-1].lstrip('/')
+limits={name:(cg/name).read_text().strip() for name in ('memory.max','memory.swap.max') if (cg/name).exists()}
+source_stat=Path(args.source).stat()
 protocol=dict(rows=args.rows,dim=dim,queries=len(queries),nprobe=1536,rerank=400,cell_capacity=2048,
               batch=256,ingest_cpu=args.ingest_cpu,search_cpu=args.search_cpu,
               source=str(Path(args.source).resolve()),query_file=str(Path(args.queries).resolve()),
-              truth_file=str(Path(args.truth).resolve()),cache='Buffered code path baseline; optimized default may use direct code IO. No eviction.',
+              truth_file=str(Path(args.truth).resolve()),cache='Engine defaults, no eviction; fresh collection, concurrent then quiescent queries.',
+              query_sha256=hashlib.sha256(queries.tobytes()).hexdigest(),truth_sha256=hashlib.sha256(truth.tobytes()).hexdigest(),
+              source_size=source_stat.st_size,source_mtime_ns=source_stat.st_mtime_ns,limits=limits,
               metadata='none',rebuild=True)
-stop=threading.Event();measurements=[];errors=[];progress=0
+stop=threading.Event();measurements=[];errors=[];progress=0;source_hash=hashlib.sha256()
 def summary(times):
     if not times:return dict(n=0)
     return dict(n=len(times),**{f'p{v}_ms':float(np.percentile(times,v)) for v in (50,95,99)},max_ms=float(max(times)))
@@ -58,7 +65,8 @@ with AnchorIndex.create(out/'collection',dim,cell_capacity=2048,auto_pack_bytes=
         for first in range(0,args.rows,256):
             if errors:raise RuntimeError(errors)
             length=min(256,args.rows-first)
-            x=np.frombuffer(f.read(length*dim*2),'<f2').reshape(length,dim).astype(np.float32)
+            raw=f.read(length*dim*2);source_hash.update(raw)
+            x=np.frombuffer(raw,'<f2').reshape(length,dim).astype(np.float32)
             ids=index.insert_batch(x,group_commit=True)
             assert np.array_equal(ids,np.arange(first,first+length,dtype=np.uint32))
             progress=first+length
@@ -79,11 +87,14 @@ with AnchorIndex.create(out/'collection',dim,cell_capacity=2048,auto_pack_bytes=
             rows.append(dict(ms=(time.perf_counter()-t)*1000,ids=ids.tolist(),scores=scores.tolist(),stats=stats))
     recall=float(np.mean([len(set(r['ids'])&set(gt))/10 for r,gt in zip(rows,truth)]))
     state=index.stats()
-cg=Path('/sys/fs/cgroup')/Path('/proc/self/cgroup').read_text().strip().split('::')[-1].lstrip('/')
+protocol['source_prefix_sha256']=source_hash.hexdigest()
 resources={name:(cg/name).read_text().strip() for name in ('memory.peak','memory.max','memory.events','memory.swap.max') if (cg/name).exists()}
 report=dict(protocol=protocol,ingestion_seconds=ingestion_seconds,tail_ingestion_seconds=tail_seconds,
             recall_at_10=recall,quiescent=summary([r['ms'] for r in rows]),
             concurrent=summary([r['ms'] for r in measurements]),state=state,resources=resources)
+report['provenance']=dict(machine=platform.machine(),kernel=platform.release(),
+    native_sha256=hashlib.sha256(Path(_lib._name).read_bytes()).hexdigest(),
+    benchmark_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
 failures=[]
 if args.baseline:
     baseline=json.loads(Path(args.baseline).read_text());assert baseline['protocol']==protocol,'Different benchmark protocol'

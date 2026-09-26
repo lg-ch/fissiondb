@@ -1,0 +1,60 @@
+name: Rebuilt live performance comparison
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'scripts/fissiondb/**'
+      - 'tests/bench_live_regression.py'
+      - 'tests/make_live_regression_fixture.py'
+      - '.github/workflows/live-performance.yml'
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Baseline commit or branch (native live fission API required)
+        required: true
+        default: a62389b7e35d12cf15772906f66beb8b36299e8d
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: candidate
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.baseline_ref || github.event.pull_request.base.sha }}
+          path: baseline
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: sudo apt-get update && sudo apt-get install -y gcc make liburing-dev libroaring-dev libxxhash-dev libcurl4-openssl-dev
+      - run: python -m pip install numpy
+      - run: make -C baseline product && make -C candidate product
+      - run: python candidate/tests/make_live_regression_fixture.py --output fixture
+      - name: Fresh baseline and candidate under equal memory caps
+        run: |
+          python_bin=$(command -v python)
+          for revision in baseline candidate; do
+            extra=()
+            if [ "$revision" = candidate ]; then
+              extra=(--baseline "$PWD/results/baseline/report.json")
+            fi
+            sudo systemd-run --wait --pipe --collect --unit="live-regression-$revision" \
+              --property=MemoryMax=2000000000 --property=MemorySwapMax=0 \
+              --setenv="PYTHONPATH=$PWD/$revision/scripts" \
+              "$python_bin" "$PWD/candidate/tests/bench_live_regression.py" \
+              --source "$PWD/fixture/base.f16bin" --queries "$PWD/fixture/queries.npy" \
+              --truth "$PWD/fixture/truth.npz" --rows 65536 --query-count 64 \
+              --ingest-cpu 0 --search-cpu 1 --output "$PWD/results/$revision" \
+              --max-p50-ratio 1.25 --max-p95-ratio 1.50 "${extra[@]}"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rebuilt-live-comparison
+          path: |
+            results/*/*.json
+            fixture/truth.json

@@ -1,6 +1,8 @@
 /* One bounded split job. The parent stays published (including concurrent
  * appends) until all of its records have been encoded into private daughters.
- * Lock order: job_mutex -> live lock -> work_mutex. Never wait with live locked.
+ * Lock order: job_mutex -> publish_mutex -> live lock -> work_mutex.
+ * Only reservations/publication take publish_mutex. Never wait for progress
+ * with live locked.
  * Checkpoint/compaction take job_mutex, so neither can recycle staging chunks
  * or change journal offsets during preparation. Readers only take live.lock.
  */
@@ -42,8 +44,8 @@ static void live_vector_write_lock(AnchorLive*l){
         l->fission->pressure_waits++;fission_wait_locked(l);pthread_rwlock_wrlock(&l->lock);
     }
 }
-static void live_fission_maintenance_lock(AnchorLive*l){if(l->fission)pthread_mutex_lock(&l->fission->job_mutex);}
-static void live_fission_maintenance_unlock(AnchorLive*l){if(l->fission)pthread_mutex_unlock(&l->fission->job_mutex);}
+static void live_fission_maintenance_lock(AnchorLive*l){if(l->fission){pthread_mutex_lock(&l->fission->job_mutex);pthread_mutex_lock(&l->fission->publish_mutex);}}
+static void live_fission_maintenance_unlock(AnchorLive*l){if(l->fission){pthread_mutex_unlock(&l->fission->publish_mutex);pthread_mutex_unlock(&l->fission->job_mutex);}}
 
 static void fission_job_free(FissionJob*j){
     free(j->spans);free(j->incoming);free(j->valid);free(j->raw);free(j->sketch);free(j->members);
@@ -167,7 +169,8 @@ static int fission_job_grow(AnchorLive*l,uint32_t need){
  */
 static int fission_job_write(AnchorLive*l,FissionJob*j){
     LiveFission*f=l->fission;int rc=-1;
-    if(fission_job_grow(l,j->other+(j->split?1:0)))return -1;
+    pthread_mutex_lock(&f->publish_mutex);
+    if(fission_job_grow(l,j->other+(j->split?1:0))){pthread_mutex_unlock(&f->publish_mutex);return -1;}
     pthread_rwlock_wrlock(&l->lock);
     if(l->poisoned)goto unlock;
     uint32_t oldJ=f->J;
@@ -184,7 +187,7 @@ static int fission_job_write(AnchorLive*l,FissionJob*j){
     }
     if(f->J!=oldJ&&ftruncate(f->fd,(off_t)((uint64_t)f->J*FISSION_CHUNK*FISSION_ENTRY)))goto unlock;
     rc=0;
-unlock:pthread_rwlock_unlock(&l->lock);if(rc)return rc;
+unlock:pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&f->publish_mutex);if(rc)return rc;
     for(int s=0;s<=j->split;s++)while(j->written[s]<j->count[s]){
         uint32_t pos=j->written[s],block=pos/FISSION_CHUNK,inside=pos%FISSION_CHUNK,n=j->count[s]-pos;
         if(n>FISSION_CHUNK-inside)n=FISSION_CHUNK-inside;
@@ -221,9 +224,10 @@ static int fission_run_job(AnchorLive*l,uint32_t cell){
     for(;;){
         if(fission_job_delta(l,j)||fission_job_write(l,j))goto done;
         if(fission_test_barrier(2))goto done;
+        pthread_mutex_lock(&f->publish_mutex);
         pthread_rwlock_wrlock(&l->lock);
-        if(l->poisoned){pthread_rwlock_unlock(&l->lock);goto done;}
-        if(f->cells[cell].count!=j->consumed){pthread_rwlock_unlock(&l->lock);continue;}
+        if(l->poisoned){pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&f->publish_mutex);goto done;}
+        if(f->cells[cell].count!=j->consumed){pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&f->publish_mutex);continue;}
         /* Acquiring the write lock also waits out readers of the old parent.
          * Its chunks remain untouched until a later durable checkpoint. */
         double published=fission_now();
@@ -238,7 +242,7 @@ static int fission_run_job(AnchorLive*l,uint32_t cell){
         f->active=FISSION_NONE;fission_enqueue(f,cell);if(j->split)fission_enqueue(f,j->other);
         f->last_publish_ms=fission_now()-published;f->publish_ms+=f->last_publish_ms;f->publish_max_ms=fmax(f->publish_max_ms,f->last_publish_ms);f->publishes++;
         f->last_split_ms=fission_now()-began;f->split_ms+=f->last_split_ms;f->split_max_ms=fmax(f->split_max_ms,f->last_split_ms);
-        fission_signal(f);pthread_rwlock_unlock(&l->lock);rc=0;break;
+        fission_signal(f);pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&f->publish_mutex);rc=0;break;
     }
 done:fission_job_free(j);pthread_rwlock_wrlock(&l->lock);f->scratch_bytes=0;pthread_rwlock_unlock(&l->lock);return rc;
 }
@@ -297,6 +301,6 @@ int anchor_live_fission_progress(AnchorLive*l,uint64_t v[8],double t[3]){
     if(!l||!l->fission||!v||!t||anchor_live_read_lock(l))return -1;
     LiveFission*f=l->fission;
     uint64_t values[]={f->pending+(f->active!=FISSION_NONE),f->active!=FISSION_NONE,
-        __atomic_load_n(&f->queries_during_prepare,__ATOMIC_RELAXED),f->delta_records,f->pressure_waits,f->scratch_bytes,f->peak_scratch_bytes,f->publishes};
+        __atomic_load_n(&f->queries_during_prepare,__ATOMIC_RELAXED),f->delta_records,__atomic_load_n(&f->pressure_waits,__ATOMIC_RELAXED),f->scratch_bytes,f->peak_scratch_bytes,f->publishes};
     double times[]={f->publish_ms,f->publish_max_ms,f->last_publish_ms};memcpy(v,values,sizeof(values));memcpy(t,times,sizeof(times));anchor_live_read_unlock(l);return 0;
 }

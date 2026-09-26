@@ -13,6 +13,10 @@ def test_live_batched_reads_match_serial_with_tail_chunks(tmp_path,dim):
             index.insert_batch(rows,[{'group':'yes' if i<5000 else 'no'} for i in range(first,first+len(rows))],group_commit=True)
         index.flush_fission()
         with index.context(nprobe=1536,rerank=400) as query:
+            default=query.search(x[6060])[2]['live']
+            assert default['direct_reads']==0
+            assert default['max_pending']>1 and default['submits']<default['reads']
+            if default['code_reads']>64:assert default['overlap_batches']>0
             for where in (None,{'group':'yes'}):
                 reference=query.residual_io(batch_cells=1,overlap=False,direct=False).search(x[6060],where=where)
                 assert reference[2]['live']['max_pending']==1
