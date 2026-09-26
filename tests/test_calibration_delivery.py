@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from mangrove.calibration import recall_lower_bound,calibrate_snapshot
+from fissiondb.calibration import recall_lower_bound,calibrate_snapshot
 
 
 def test_bound_does_not_accept_tiny_perfect_sample():
@@ -37,7 +37,7 @@ def workload():
 
 
 def test_end_to_end_selection_audit_and_resume(monkeypatch,tmp_path):
-    monkeypatch.setattr('mangrove.calibration.fingerprint',lambda index:'snapshot-a')
+    monkeypatch.setattr('fissiondb.calibration.fingerprint',lambda index:'snapshot-a')
     index=FakeIndex();q,gt,labels=workload();checkpoint=tmp_path/'progress.json'
     options=dict(initial_probes=1,maximum_probes=2,initial_rerank=10,maximum_rerank=10,checkpoint=checkpoint)
     result=calibrate_snapshot(index,q,gt,labels,**options)
@@ -53,7 +53,7 @@ def test_end_to_end_selection_audit_and_resume(monkeypatch,tmp_path):
 
 
 def test_failure_and_latency_tradeoff_are_explicit(monkeypatch):
-    monkeypatch.setattr('mangrove.calibration.fingerprint',lambda index:'snapshot-a')
+    monkeypatch.setattr('fissiondb.calibration.fingerprint',lambda index:'snapshot-a')
     q,gt,labels=workload();options=dict(initial_probes=1,maximum_probes=2,initial_rerank=10,maximum_rerank=10)
     index=FakeIndex(fail_audit=True);failed=calibrate_snapshot(index,q,gt,labels,**options)
     assert failed['status']=='quality_not_validated' and not failed['validated']
@@ -65,7 +65,7 @@ def test_failure_and_latency_tradeoff_are_explicit(monkeypatch):
 
 
 def test_rejects_group_leakage_and_small_samples(monkeypatch):
-    monkeypatch.setattr('mangrove.calibration.fingerprint',lambda index:'snapshot-a')
+    monkeypatch.setattr('fissiondb.calibration.fingerprint',lambda index:'snapshot-a')
     q,gt,labels=workload()
     with pytest.raises(ValueError):calibrate_snapshot(FakeIndex(),q,gt,labels,groups=['same']*600)
     with pytest.raises(ValueError):calibrate_snapshot(FakeIndex(),q[:64],gt[:64],labels[:64])
@@ -76,14 +76,14 @@ from test_anchor_live import frozen
 
 def test_native_cli_profile_can_serve_and_resume(frozen,tmp_path):
     import json,os,subprocess,sys
-    from mangrove.anchors import AnchorIndex
+    from fissiondb.anchors import AnchorIndex
     rng=np.random.default_rng(81)
     q=rng.normal(size=(600,128)).astype(np.float32)
     x=frozen[2].astype(np.float64);x/=np.linalg.norm(x,axis=1,keepdims=True)
     gt=np.argsort(-(q.astype(np.float64)@x.T),axis=1)[:,:10]
     workload_path=tmp_path/'workload.npz';profile_path=tmp_path/'profile.json'
     np.savez(workload_path,queries=q,ids=gt,partitions=['calibration']*300+['validation']*300)
-    command=[sys.executable,'-m','mangrove.calibration',str(frozen[0]),str(frozen[1]),str(workload_path),
+    command=[sys.executable,'-m','fissiondb.calibration',str(frozen[0]),str(frozen[1]),str(workload_path),
              '--output',str(profile_path),'--initial-rerank','10240','--max-rerank','10240','--p95-ms','10000','--cold']
     environment={**os.environ,'OMP_NUM_THREADS':'1','OPENBLAS_NUM_THREADS':'1'}
     subprocess.run(command,check=True,capture_output=True,env=environment)
@@ -101,7 +101,7 @@ def test_native_cli_profile_can_serve_and_resume(frozen,tmp_path):
 
 def test_resume_after_audit_interruption_keeps_frozen_choices(monkeypatch,tmp_path):
     import json
-    monkeypatch.setattr('mangrove.calibration.fingerprint',lambda index:'snapshot-a')
+    monkeypatch.setattr('fissiondb.calibration.fingerprint',lambda index:'snapshot-a')
     q,gt,labels=workload();index=FakeIndex();checkpoint=tmp_path/'checkpoint.json'
     original=FakeContext.search
     def interrupted(self,q,**kwargs):
@@ -118,7 +118,7 @@ def test_resume_after_audit_interruption_keeps_frozen_choices(monkeypatch,tmp_pa
 
 
 def test_rejects_unachievable_sample_bound_and_mutable_index(monkeypatch):
-    monkeypatch.setattr('mangrove.calibration.fingerprint',lambda index:'snapshot-a')
+    monkeypatch.setattr('fissiondb.calibration.fingerprint',lambda index:'snapshot-a')
     q,gt,labels=workload()
     with pytest.raises(ValueError,match='even at perfect recall'):
         calibrate_snapshot(FakeIndex(),q[:400],gt[:400],['calibration']*200+['validation']*200)
@@ -130,7 +130,7 @@ def test_rejects_unachievable_sample_bound_and_mutable_index(monkeypatch):
 
 
 def test_controller_expands_the_stage_losing_true_neighbors(monkeypatch):
-    monkeypatch.setattr('mangrove.calibration.fingerprint',lambda index:'snapshot-a')
+    monkeypatch.setattr('fissiondb.calibration.fingerprint',lambda index:'snapshot-a')
     q,gt,labels=workload()
     class RerankIndex(FakeIndex):
         def context(self,**kwargs):
@@ -151,10 +151,10 @@ def test_controller_expands_the_stage_losing_true_neighbors(monkeypatch):
 def test_dimension_default_routes_native_and_server_without_calibration(frozen,tmp_path):
     import os,subprocess
     from test_anchor_live import ROOT
-    from mangrove.anchors import AnchorIndex
+    from fissiondb.anchors import AnchorIndex
     from serve_anchors import AnchorServer
     directory=tmp_path/'index';directory.mkdir()
-    subprocess.run([str(ROOT/'mangrove-engine'),'abuild',str(frozen[1]),str(directory),'128','--m','2','--eps','999','--tqbits','1','--seed','52'],
+    subprocess.run([str(ROOT/'fissiondb-engine'),'abuild',str(frozen[1]),str(directory),'128','--m','2','--eps','999','--tqbits','1','--seed','52'],
                    check=True,capture_output=True,env={**os.environ,'OMP_NUM_THREADS':'1'})
     with AnchorIndex(directory,frozen[1]) as index:
         assert index.default_nprobe==64

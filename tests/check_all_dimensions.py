@@ -16,7 +16,7 @@ def main():
     parser.add_argument('--output',required=True)
     args=parser.parse_args()
     for dim in range(1,1025):
-        with tempfile.TemporaryDirectory(prefix='mangrove-dimension-') as tmp:
+        with tempfile.TemporaryDirectory(prefix='fissiondb-dimension-') as tmp:
             directory,base,out,x=build(Path(tmp),dim,n=24)
             unit=x.astype(np.float64);unit/=np.linalg.norm(unit,axis=1,keepdims=True)
             q=np.random.default_rng(dim).normal(size=dim)

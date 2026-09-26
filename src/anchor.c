@@ -98,7 +98,7 @@ static int s3_init(S3Ctx* c) {
     curl_multi_setopt(c->multi, CURLMOPT_MAX_HOST_CONNECTIONS, 512L);
     curl_multi_setopt(c->multi, CURLMOPT_MAX_TOTAL_CONNECTIONS, 512L);
     curl_multi_setopt(c->multi, CURLMOPT_MAXCONNECTS, 512L);
-    const char* http1=getenv("MANGROVE_S3_HTTP1");
+    const char* http1=getenv("FISSIONDB_S3_HTTP1");
     if(http1&&strcmp(http1,"0")&&strcmp(http1,"1"))goto fail;
     c->force_http1=http1&&!strcmp(http1,"1");
     const char* k = getenv("AWS_ACCESS_KEY_ID");
@@ -585,7 +585,7 @@ static int anchor_save_file(const char* path, const void* data, size_t size) {
 /* ================= BUILD ================= */
 int cmd_anchor_build(int argc, char** argv) {
     if (argc < 5) {
-        fprintf(stderr, "usage: mangrove-engine abuild <base.f16bin> <out_dir> <K> "
+        fprintf(stderr, "usage: fissiondb-engine abuild <base.f16bin> <out_dir> <K> "
                         "[--eps 0.20] [--m 3] [--tqbits 4] [--seed 42] "
                         "[--nmax 0]\n");
         return 1;

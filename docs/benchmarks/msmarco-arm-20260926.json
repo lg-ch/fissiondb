@@ -1,0 +1,35 @@
+{
+  "n": 113520750,
+  "dim": 1024,
+  "anchors": 200000,
+  "probes": 1536,
+  "rerank": 400,
+  "queries": 600,
+  "protocol": "600 reused real query-to-document validation queries, fixed order; one GB10 CPU5; decimal1GB cgroup, swap0. Full original float16 vectors on NVMe. POSIX_FADV_DONTNEED before each query; direct residual reads with overlapped batches of64 cells. No ingestion, concurrent queries or HTTP/network latency. Device hardware caches were not flushed.",
+  "resources": {
+    "memory.max": "999997440",
+    "memory.peak": "261742592",
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "0",
+    "cpuset.cpus.effective": "5"
+  },
+  "summary": [
+    {
+      "variant": "integrated",
+      "recall": 0.9625,
+      "p50_ms": 52.693151868879795,
+      "p95_ms": 62.59103307966142,
+      "mean_stages": {
+        "anchor_ms": 7.510588548183441,
+        "io_ms": 8.029766098658245,
+        "score_ms": 34.898596082528435,
+        "rerank_ms": 2.1126605606079103,
+        "total_ms": 52.60663750886917,
+        "entries": 1845177.5033333334,
+        "bytes": 138387415.04
+      }
+    }
+  ],
+  "source_snapshot": "7b342ac3bd82e47713b7570729317744438e54e0",
+  "source_snapshot_note": "The FissionDB import contains the same native engine source used for this measurement; subsequent branding changes do not change the retrieval algorithm."
+}

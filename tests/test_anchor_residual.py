@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from mangrove.anchors import AnchorIndex
+from fissiondb.anchors import AnchorIndex
 
 
 def fingerprint(anchors, offsets, seed):
@@ -32,7 +32,7 @@ def residual(tmp_path_factory):
     base = root/'base.f16bin'
     base.write_bytes(struct.pack('<II', *x.shape)+x.tobytes())
     index=root/'index'; index.mkdir()
-    subprocess.run([str(ROOT/'mangrove-engine'),'abuild',str(base),str(index),'32',
+    subprocess.run([str(ROOT/'fissiondb-engine'),'abuild',str(base),str(index),'32',
                     '--m','2','--eps','999','--tqbits','1','--seed','52'],
                    check=True,capture_output=True,env={**os.environ,'OMP_NUM_THREADS':'1'})
     a=np.fromfile(index/'anchors.bin',np.float32)
@@ -262,9 +262,10 @@ def test_pack_allows_concurrent_writes_and_queries(residual,tmp_path):
             assert ids[0]==added[-1]
 
 
-def test_portable_backup_restore_and_checksums(residual,tmp_path):
-    from mangrove.backup import create,restore
-    from mangrove.metatypes import FloatSpec
+@pytest.mark.parametrize('backup_format', ['fissiondb-backup-v1', 'mangrove-backup-v1'])
+def test_portable_backup_restore_and_checksums(residual,tmp_path,backup_format):
+    from fissiondb.backup import create,restore
+    from fissiondb.metatypes import FloatSpec
     index,base,out,x=residual
     live=tmp_path/'live';backup=tmp_path/'backup'
     with AnchorIndex(index,base,residual_dir=out,live_dir=live,float_specs={'price':FloatSpec(2)}) as idx:
@@ -273,6 +274,12 @@ def test_portable_backup_restore_and_checksums(residual,tmp_path):
         idx.pack_live()
         create(idx,backup)
         idx.delete(added)  # Must not alter the completed snapshot.
+    import json
+    manifest_path=backup/'backup.json'
+    manifest=json.loads(manifest_path.read_text())
+    assert manifest['format']=='fissiondb-backup-v1'
+    manifest['format']=backup_format
+    manifest_path.write_text(json.dumps(manifest))
     kwargs=restore(backup,tmp_path/'restored')
     assert not (tmp_path/'restored/index/blocks.bin').exists()
     with AnchorIndex(**kwargs) as idx:
@@ -288,7 +295,7 @@ def test_portable_backup_restore_and_checksums(residual,tmp_path):
 
 
 def test_group_commit_idempotency_and_partial_conflict(residual,tmp_path):
-    from mangrove.anchors import AnchorBatchError,IdempotencyConflict
+    from fissiondb.anchors import AnchorBatchError,IdempotencyConflict
     index,base,out,x=residual
     keys=[f'row-{i}' for i in range(300)]
     with AnchorIndex(index,base,residual_dir=out,live_dir=tmp_path) as idx:
@@ -310,7 +317,7 @@ def test_group_commit_idempotency_and_partial_conflict(residual,tmp_path):
 def test_product_http_client_pack_and_metrics(residual, tmp_path):
     import threading
     from serve_anchors import AnchorServer
-    from mangrove.client import Client, ServiceError
+    from fissiondb.client import Client, ServiceError
     index, base, out, x = residual
     with AnchorIndex(index, base, residual_dir=out, live_dir=tmp_path) as idx:
         server = AnchorServer(('127.0.0.1', 0), idx, nprobe=32, rerank=5120, api_key='test-key')

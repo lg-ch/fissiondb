@@ -1,4 +1,4 @@
-"""Mangrove: native vector search and an HTTP client for the anchor service."""
+"""FissionDB: native vector search and an HTTP client for the anchor service."""
 from .client import Client, ServiceError
 
 __version__ = '0.3.0.dev0'

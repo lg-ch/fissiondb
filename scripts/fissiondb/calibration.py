@@ -1,6 +1,6 @@
 """Automatic fixed-index calibration with an independently reserved audit.
 
-Run with python -m mangrove.calibration. Ground truth must describe exactly the
+Run with python -m fissiondb.calibration. Ground truth must describe exactly the
 indexed snapshot. Statistical interpretation assumes representative independent
 query groups; confidence does not protect against distribution drift.
 """

@@ -2,12 +2,12 @@ import numpy as np
 import pytest
 from test_anchor_live import frozen
 from test_anchor_residual import residual
-from mangrove.anchors import AnchorIndex
-from mangrove.adaptive import calibrate
+from fissiondb.anchors import AnchorIndex
+from fissiondb.adaptive import calibrate
 
 
 def test_autocalibration_expands_routing_without_validation_feedback(frozen):
-    from mangrove.adaptive import autocalibrate
+    from fissiondb.adaptive import autocalibrate
     x=frozen[2].astype(np.float64);x/=np.linalg.norm(x,axis=1,keepdims=True)
     q=x[:8];gt=np.argsort(-(q@x.T),axis=1)[:,:10]
     split=['calibration']*4+['validation']*4

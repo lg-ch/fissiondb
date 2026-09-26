@@ -35,7 +35,7 @@ def test_s3_session_token_is_sent(native_helpers, http1):
             f'http://127.0.0.1:{server.server_port}/object'],
             env={**os.environ, 'AWS_ACCESS_KEY_ID': 'test-access',
                  'AWS_SECRET_ACCESS_KEY': 'test-secret', 'AWS_SESSION_TOKEN': 'test-session',
-                 'AWS_REGION': 'us-east-1', 'MANGROVE_S3_HTTP1': http1}, capture_output=True)
+                 'AWS_REGION': 'us-east-1', 'FISSIONDB_S3_HTTP1': http1}, capture_output=True)
         assert result.returncode == 0, result.stderr
         assert seen == ['test-session']
     finally:
@@ -45,7 +45,7 @@ def test_s3_session_token_is_sent(native_helpers, http1):
 def test_s3_invalid_protocol_setting_fails_closed(native_helpers):
     result = subprocess.run([str(native_helpers/'s3_range_regression'),
         'http://127.0.0.1:1/not-contacted'],
-        env={**os.environ, 'MANGROVE_S3_HTTP1': 'invalid'}, timeout=5)
+        env={**os.environ, 'FISSIONDB_S3_HTTP1': 'invalid'}, timeout=5)
     assert result.returncode == 3
 
 
@@ -65,7 +65,7 @@ def tiny(tmp_path):
 
 
 def command(*args):
-    return subprocess.run([str(ROOT/'mangrove-engine'), *map(str, args)], capture_output=True,
+    return subprocess.run([str(ROOT/'fissiondb-engine'), *map(str, args)], capture_output=True,
                           text=True, timeout=60, env={**os.environ, 'OMP_NUM_THREADS': '1'})
 
 
@@ -118,7 +118,7 @@ def native_helpers(tmp_path_factory):
         args = ['gcc', '-O2', '-std=c11', '-fopenmp', '-I', str(ROOT/'src'),
                 str(ROOT/'tests'/f'{name}.c'), '-o', str(out/name)]
         if name.startswith('hot'):
-            args += ['-L', str(ROOT), f'-Wl,-rpath,{ROOT}', '-lmangrove']
+            args += ['-L', str(ROOT), f'-Wl,-rpath,{ROOT}', '-lfissiondb']
         else:
             import platform
             if platform.machine() == 'aarch64':
@@ -170,7 +170,7 @@ def test_s3_validates_http_and_range(native_helpers, status, range_header, lengt
 def test_anchor_api_reuses_context_and_matches_cli(tiny):
     import sys
     sys.path.insert(0, str(ROOT/'scripts'))
-    from mangrove.anchors import AnchorIndex
+    from fissiondb.anchors import AnchorIndex
     out, _ = build(tiny, 'index')
     cli = tiny/'result.bin'
     r = command('abench', out, tiny/'base.f16bin', tiny/'q.fbin', 10, 8, 16, '--out', cli)
@@ -190,7 +190,7 @@ def test_anchor_api_reuses_context_and_matches_cli(tiny):
 def test_anchor_api_memory_limit_during_query(tiny):
     import sys
     sys.path.insert(0, str(ROOT/'scripts'))
-    from mangrove.anchors import AnchorIndex
+    from fissiondb.anchors import AnchorIndex
     out, _ = build(tiny, 'index')
     # A skewed index with one cell larger than the available IO buffer.
     entry = (out/'blocks.bin').read_bytes()[:20]
@@ -205,7 +205,7 @@ def test_anchor_api_memory_limit_during_query(tiny):
 def test_streamed_cells_preserve_candidates_across_buffer_reuse(tiny):
     import sys
     sys.path.insert(0, str(ROOT/'scripts'))
-    from mangrove.anchors import AnchorIndex
+    from fissiondb.anchors import AnchorIndex
     out, _ = build(tiny, 'index')
     data = (out/'blocks.bin').read_bytes()
     offsets = np.fromfile(out/'offs.bin', np.uint64)

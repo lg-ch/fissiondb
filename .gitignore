@@ -43,10 +43,10 @@ datasets/
 .claude/
 claude-sessions/
 
-mangrove-engine
+fissiondb-engine
 *.f16bin
 *.fbin
 *.whl
 
 /docker-default.json
-/mangrove-seccomp.json
+/fissiondb-seccomp.json

@@ -9,8 +9,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from mangrove.anchors import AnchorIndex, AnchorBatchError, IdempotencyConflict
-from mangrove.metatypes import FloatSpec
+from fissiondb.anchors import AnchorIndex, AnchorBatchError, IdempotencyConflict
+from fissiondb.metatypes import FloatSpec
 
 
 def native_where(where):
@@ -41,7 +41,7 @@ class AnchorServer(ThreadingHTTPServer):
         if not 1 <= workers <= 64 or max_body < 1:
             raise ValueError('Invalid worker count or body limit')
         if address[0] not in ('127.0.0.1', 'localhost', '::1') and not api_key:
-            raise ValueError('Set MANGROVE_API_KEY for a non-loopback bind')
+            raise ValueError('Set FISSIONDB_API_KEY for a non-loopback bind')
         self.index, self.api_key, self.max_body = index, api_key, max_body
         self._slots = threading.BoundedSemaphore(workers + 2)
         self._contexts = queue.Queue()
@@ -269,7 +269,7 @@ def main():
             nprobe=args.nprobe, rerank=args.rerank, memory_bytes=args.memory_bytes,
             calibration=json.load(open(args.calibration)) if args.calibration else None,
             latency_budget_ms=args.latency_budget_ms, code_bytes=args.code_bytes,
-            api_key=os.environ.get('MANGROVE_API_KEY'), s3_url=args.s3_url)
+            api_key=os.environ.get('FISSIONDB_API_KEY'), s3_url=args.s3_url)
         def stop(*_):
             threading.Thread(target=server.shutdown, daemon=True).start()
         signal.signal(signal.SIGTERM, stop)

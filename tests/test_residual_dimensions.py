@@ -11,7 +11,7 @@ import pytest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
-from mangrove.anchors import AnchorIndex
+from fissiondb.anchors import AnchorIndex
 
 
 def build(root,dim,n=96,m=2,tqbits=1):
@@ -22,7 +22,7 @@ def build(root,dim,n=96,m=2,tqbits=1):
     x=x.astype('<f2');base=root/'base.f16bin'
     base.write_bytes(struct.pack('<II',n,dim)+x.tobytes())
     directory=root/'index';directory.mkdir()
-    subprocess.run([str(ROOT/'mangrove-engine'),'abuild',str(base),str(directory),'8',
+    subprocess.run([str(ROOT/'fissiondb-engine'),'abuild',str(base),str(directory),'8',
                     '--m',str(m),'--eps','999','--tqbits',str(tqbits),'--seed','52'],
                    check=True,capture_output=True,env={**os.environ,'OMP_NUM_THREADS':'1'})
     out=root/'residual'

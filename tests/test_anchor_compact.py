@@ -158,7 +158,7 @@ def test_interrupted_publication(frozen, tmp_path, publication_faults, mode, cod
     populate(frozen, tmp_path)
     script = '''
 import sys
-from mangrove.anchors import AnchorIndex
+from fissiondb.anchors import AnchorIndex
 with AnchorIndex(sys.argv[1],sys.argv[2],live_dir=sys.argv[3]) as index:
     try: index.compact()
     except OSError:

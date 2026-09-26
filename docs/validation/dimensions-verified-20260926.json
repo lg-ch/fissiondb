@@ -1,1 +1,0 @@
-{"dimensions_verified": 1024, "first": 1, "last": 1024, "checks": ["native_build", "residual_conversion", "exact_cosine", "live_pack", "delete"], "recall_claim": "exhaustive small-corpus correctness, not large-corpus recall"}

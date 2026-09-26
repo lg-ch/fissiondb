@@ -4,9 +4,9 @@
 !src/*.h
 !src/*.inc
 !scripts/
-!scripts/mangrove/
-!scripts/mangrove/*.py
-!scripts/mangrove/py.typed
+!scripts/fissiondb/
+!scripts/fissiondb/*.py
+!scripts/fissiondb/py.typed
 !scripts/serve_anchors.py
 !scripts/check_anchor_s3.py
 !Makefile

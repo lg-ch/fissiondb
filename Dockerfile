@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
-COPY --from=builder /src/mangrove-engine /usr/local/bin/mangrove-engine
+COPY --from=builder /src/fissiondb-engine /usr/local/bin/fissiondb-engine
 ENV OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
-ENTRYPOINT ["mangrove-serve"]
+ENTRYPOINT ["fissiondb-serve"]
 CMD ["--help"]

@@ -1,7 +1,7 @@
 import struct
 import numpy as np
 import pytest
-from mangrove.ground_truth import exact_top_k
+from fissiondb.ground_truth import exact_top_k
 
 
 def test_streamed_reference_filters_ties_and_prefix(tmp_path):

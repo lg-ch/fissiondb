@@ -13,9 +13,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from mangrove.anchors import AnchorIndex
-from mangrove.anchors import _lib, AnchorBatchError
-from mangrove.metatypes import FloatSpec
+from fissiondb.anchors import AnchorIndex
+from fissiondb.anchors import _lib, AnchorBatchError
+from fissiondb.metatypes import FloatSpec
 
 
 @pytest.fixture(scope='module')
@@ -29,7 +29,7 @@ def frozen(tmp_path_factory):
     base.write_bytes(struct.pack('<II', *vectors.shape) + vectors.tobytes())
     index = directory / 'index'
     index.mkdir()
-    subprocess.run([str(ROOT / 'mangrove-engine'), 'abuild', str(base), str(index), '32',
+    subprocess.run([str(ROOT / 'fissiondb-engine'), 'abuild', str(base), str(index), '32',
                     '--m', '2', '--eps', '999', '--tqbits', '1', '--seed', '52'],
                    check=True, capture_output=True, env={**os.environ, 'OMP_NUM_THREADS': '1'})
     return index, base, vectors.astype(np.float32)
@@ -171,7 +171,7 @@ def test_exclusive_lock_and_fingerprint(frozen, tmp_path):
 def test_acknowledged_insert_survives_process_exit(frozen, tmp_path):
     script = '''
 import os, sys, numpy as np
-from mangrove.anchors import AnchorIndex
+from fissiondb.anchors import AnchorIndex
 index = AnchorIndex(sys.argv[1], sys.argv[2], live_dir=sys.argv[3])
 v = np.fromfile(sys.argv[2], np.float16, offset=8, count=128).astype(np.float32)
 assert index.insert(v, {'durable': True}) == 5120

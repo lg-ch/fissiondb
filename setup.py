@@ -11,7 +11,7 @@ class NativeBuild(build_ext):
 
 
 arch=['-march=armv8.2-a+dotprod+fp16'] if platform.machine() in ('aarch64','arm64') else ['-march=x86-64']
-setup(ext_modules=[Extension('mangrove.libmangrove_anchor',
+setup(ext_modules=[Extension('fissiondb.libfissiondb_anchor',
     sources=['src/anchor.c','src/anchor_live.c'],
     depends=['src/anchor.h','src/anchor_live.h','src/anchor_residual.inc',
              'src/anchor_residual_build.inc','src/anchor_live_pack.inc','src/anchor_live_backup.inc'],

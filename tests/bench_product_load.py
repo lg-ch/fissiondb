@@ -15,7 +15,7 @@ import traceback
 
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
-from mangrove.anchors import AnchorIndex
+from fissiondb.anchors import AnchorIndex
 
 
 def main():

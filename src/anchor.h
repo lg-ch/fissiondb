@@ -1,5 +1,5 @@
-#ifndef MANGROVE_ANCHOR_H
-#define MANGROVE_ANCHOR_H
+#ifndef FISSIONDB_ANCHOR_H
+#define FISSIONDB_ANCHOR_H
 #include <stdint.h>
 #include <stddef.h>
 typedef struct AnchorIndex AnchorIndex;

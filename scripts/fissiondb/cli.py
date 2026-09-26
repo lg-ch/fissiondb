@@ -5,7 +5,7 @@ import time
 
 
 def main():
-    parser=argparse.ArgumentParser(prog='mangrove-engine-python')
+    parser=argparse.ArgumentParser(prog='fissiondb-engine-python')
     sub=parser.add_subparsers(dest='command',required=True)
     convert=sub.add_parser('convert',help='Resumable residual conversion for dimensions 1..1024')
     convert.add_argument('--index',required=True)

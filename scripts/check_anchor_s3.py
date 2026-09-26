@@ -68,7 +68,7 @@ def main():
         print(json.dumps(report, indent=2))
         return
     import boto3
-    from mangrove.anchors import AnchorIndex
+    from fissiondb.anchors import AnchorIndex
     session = boto3.Session(profile_name=args.profile, region_name=args.region)
     from botocore.config import Config
     client = session.client('s3', endpoint_url=endpoint,

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from test_anchor_live import frozen
 from test_anchor_residual import residual
-from mangrove.anchors import AnchorIndex
+from fissiondb.anchors import AnchorIndex
 
 
 @pytest.mark.parametrize('kind',['tq','residual'])

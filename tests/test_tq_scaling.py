@@ -2,7 +2,7 @@
 import struct
 import numpy as np
 import pytest
-from mangrove.anchors import AnchorIndex
+from fissiondb.anchors import AnchorIndex
 
 
 def inverse_rotation(v, seed):

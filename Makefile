@@ -10,15 +10,15 @@ LDFLAGS ?= -lm -fopenmp -luring -lroaring -lxxhash -lpthread -lcurl
 CORE := src/anchor.o src/anchor_live.o
 
 all: product
-product: mangrove-engine libmangrove_anchor.so
-mangrove-engine: $(CORE) src/anchor_main.o
+product: fissiondb-engine libfissiondb_anchor.so
+fissiondb-engine: $(CORE) src/anchor_main.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
-libmangrove_anchor.so: $(CORE)
+libfissiondb_anchor.so: $(CORE)
 	$(CC) $(CFLAGS) -shared -Wl,--no-undefined -o $@ $^ $(LDFLAGS)
 %.o: %.c $(wildcard src/*.h src/*.inc)
 	$(CC) $(CFLAGS) -c $< -o $@
 test: product
 	PYTHONPATH=scripts OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 -m pytest tests -q
 clean:
-	rm -f $(CORE) src/anchor_main.o mangrove-engine libmangrove_anchor.so
+	rm -f $(CORE) src/anchor_main.o fissiondb-engine libfissiondb_anchor.so
 .PHONY: all product test clean

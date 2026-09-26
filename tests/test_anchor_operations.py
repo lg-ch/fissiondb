@@ -10,7 +10,7 @@ import time
 import pytest
 
 from test_anchor_live import frozen, open_live, ROOT
-from mangrove.anchors import _tags
+from fissiondb.anchors import _tags
 from serve_anchors import AnchorServer
 
 
@@ -65,7 +65,7 @@ def test_batch_retry_and_empty_key_rejected(frozen, tmp_path):
 def test_retry_after_process_exit(frozen, tmp_path):
     script = '''
 import os,sys,numpy as np
-from mangrove.anchors import AnchorIndex
+from fissiondb.anchors import AnchorIndex
 i=AnchorIndex(sys.argv[1],sys.argv[2],live_dir=sys.argv[3])
 v=np.fromfile(sys.argv[2],np.float16,offset=8,count=128).astype(np.float32)
 assert i.insert(v, idempotency_key='lost-response')==5120
