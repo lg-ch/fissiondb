@@ -51,6 +51,7 @@ def create(index,destination):
     destination.mkdir()  # No overwrite, including incomplete prior backups.
     manifest={'format':'fissiondb-backup-v1','residual':index.residual_dir is not None,
               'live':index.live,'int8':index.int8,'files':{}}
+    if index.fission:manifest['fission']=True
     if index.live:
         live=destination/'live';live.mkdir()
         index.snapshot_live(live)
@@ -58,6 +59,9 @@ def create(index,destination):
         with path.open('rb') as f:
             while block:=f.read(1024*1024):digest.update(block)
         manifest['files']['live/live.log']={'size':path.stat().st_size,'sha256':digest.hexdigest()}
+        if index.fission:
+            path=live/'fission.config'
+            manifest['files']['live/fission.config']={'size':path.stat().st_size,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
     for source,name in files:
         manifest['files'][name]=_copy(source,destination/name)
     manifest['float_specs']={k:v.decimals for k,v in index.float_specs.items()}
@@ -73,6 +77,9 @@ def restore(source,destination):
     expected={'index/meta.txt','index/anchors.bin','index/offs.bin','index/scale.bin','base.f16bin'}
     expected.update({'residual/residual.meta','residual/res512.bin'} if manifest['residual'] else {'index/blocks.bin'})
     if manifest['live']:expected.add('live/live.log')
+    if manifest.get('fission'):
+        if not manifest['live'] or not manifest['residual']:raise ValueError('Invalid fission backup')
+        expected.add('live/fission.config')
     if set(manifest['files'])!=expected:raise ValueError('Invalid backup inventory')
     required=sum(v['size'] for v in manifest['files'].values())
     destination.parent.mkdir(parents=True,exist_ok=True)

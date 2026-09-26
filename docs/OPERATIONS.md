@@ -20,6 +20,37 @@ This builds `fissiondb-engine` and `libfissiondb_anchor.so`, and installs the
 
 ## Create an index
 
+For live ingestion from an empty collection:
+
+```sh
+fissiondb-build create --index /data/collection --dim 768 \
+  --cell-capacity 2048 --max-cells 300000
+fissiondb-serve --collection /data/collection --workers 4
+```
+
+`AnchorIndex.create(path, dim=768)` provides the same operation in Python.
+The destination must not exist. The native engine creates representatives from
+inserted vectors and splits overflowing cells automatically. Supported input
+dimensions are 1–1024. Cell capacity must be 64–65,536 and the cell-count ceiling
+2–1,000,000. These values persist with the collection.
+
+`max_cells` bounds representative growth, not total RAM. For example, 300,000
+representatives at a padded dimension of 1024 require about 307 MB for int8
+centers, plus metadata, allocation capacity, query buffers and the live journal's
+in-memory bookkeeping. Once the ceiling is reached, ingestion continues into
+larger cells. Monitor `/stats` or `index.fission_stats` for cell count, largest
+cell, split timings, arena size and memory owned by the adaptive structure.
+This memory counter excludes query buffers, journal bookkeeping and page cache.
+Split counts persist; timing counters restart when the process reopens.
+
+To reopen from Python, supply the collection directory, its `base.f16bin`,
+`residual` and `live` paths to `AnchorIndex`, as in the examples below. Fission
+configuration loads automatically. To add adaptive live ingestion to an existing
+residual index, use `fission_cell_capacity=2048`, or pass
+`--fission-cell-capacity 2048` to the server. Frozen cells remain immutable.
+
+For an offline frozen build:
+
 The input format is a little-endian uint32 row count and dimension, followed by
 float16 vectors. Choose the representative count for the corpus and RAM budget;
 the following example uses 4,096 and requires at least that many input vectors.
@@ -44,11 +75,14 @@ fissiondb-serve --index /data/index --base /data/base.f16bin \
 ```
 
 The 1,536/400 setting reproduces the documented MS MARCO retrieval budget; it is
-not a universal choice. Without an explicit probe count, the starting heuristic
-is half the padded dimension, bounded to the number of cells. Validate recall on
+not a universal quality guarantee. Adaptive collections default to 1,536 cells
+and 400 reranks. Fixed collections default to half the padded dimension, bounded
+to the number of cells. Validate recall on
 representative queries and exact ground truth, including each intended filter.
 `fissiondb-calibrate` provides optional offline calibration from a supplied
 workload; ingestion does not need to run that workflow.
+The optional query-adaptation policies currently apply to the frozen reader;
+adaptive live cells use the requested `nprobe` budget.
 
 HTTP endpoints include `/health`, `/stats`, `/search`, `/insert`, `/insert_batch`,
 `/update`, `/delete`, `/metadata`, `/metadata/add`, `/compact` and `/pack`.
@@ -83,6 +117,20 @@ IDs are stable and never reused. Repeating a deletion is safe, and tombstones
 survive restart and compaction. Immutable frozen files retain their allocated
 space. The compressed live snapshot accelerates reads; current live vectors
 remain in the authoritative journal.
+
+For adaptive collections, `/pack` and `index.pack_live()` persist a checkpoint.
+Automatic checkpointing defaults to a 256 MiB journal-growth threshold checked
+every 30 seconds; `--auto-pack-bytes 0` disables it. Checkpoints allow retired
+code chunks to be reused but do not shrink the arena file. Fission, checkpointing
+and compaction hold the live write lock, so requests can wait for maintenance.
+Compaction rebuilds adaptive cells and can be expensive on a large live corpus.
+Close normally to attempt a final checkpoint; journal recovery also handles
+unclean shutdowns. Restore rebuilds derived files from the committed journal.
+
+Size live storage separately: journal and row files both hold padded float32
+vectors. A 768-dimensional vector is padded to 1024, using roughly 8 KiB across
+those two files before metadata and codes. Large frozen retrieval measurements
+do not establish the disk footprint or throughput of a large live collection.
 
 Backups copy all required frozen files, originals and a committed live prefix;
 restore verifies their SHA-256 checksums. Provision disk space for an independent
@@ -122,5 +170,6 @@ python -m build
 ```
 
 The test suite exercises query correctness, residuals, dimensions, filters, live
-mutations, deletion, journal recovery, packing, compaction and backup/restore.
+mutations, automatic fission, concurrent readers, deletion, journal recovery,
+cache corruption, packing, compaction and backup/restore.
 Small-corpus correctness tests do not establish large-corpus recall or throughput.

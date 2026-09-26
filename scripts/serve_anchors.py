@@ -233,9 +233,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--index', required=True)
-    parser.add_argument('--base', required=True)
-    parser.add_argument('--live-dir', required=True)
+    parser.add_argument('--collection',help='Collection directory created by fissiondb-build create')
+    parser.add_argument('--index')
+    parser.add_argument('--base')
+    parser.add_argument('--live-dir')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8080)
     parser.add_argument('--workers', type=int, default=1)
@@ -247,12 +248,23 @@ def main():
     parser.add_argument('--memory-bytes', type=int, default=800_000_000)
     parser.add_argument('--auto-compact-bytes', type=int, default=64 * 1024 * 1024)
     parser.add_argument('--auto-compact-interval', type=float, default=30)
-    parser.add_argument('--auto-pack-bytes', type=int, default=0)
+    parser.add_argument('--auto-pack-bytes', type=int, default=None)
     parser.add_argument('--auto-pack-interval', type=float, default=30)
     parser.add_argument('--s3-url')
     parser.add_argument('--residual-dir')
+    parser.add_argument('--fission-cell-capacity',type=int,default=None,help='Enable automatic live-cell splitting (64..65536)')
+    parser.add_argument('--fission-max-cells',type=int,default=300_000)
     parser.add_argument('--float-specs', default='{}', help='JSON mapping of float fields to decimal precision')
     args = parser.parse_args()
+    if args.collection:
+        if any((args.index,args.base,args.live_dir,args.residual_dir)):
+            parser.error('--collection cannot be combined with explicit data paths')
+        from pathlib import Path
+        collection=Path(args.collection)
+        args.index=str(collection);args.base=str(collection/'base.f16bin')
+        args.live_dir=str(collection/'live');args.residual_dir=str(collection/'residual')
+    if not all((args.index,args.base,args.live_dir)):
+        parser.error('Provide --collection or --index, --base and --live-dir')
     try:
         precisions = json.loads(args.float_specs)
         if not isinstance(precisions, dict) or any(type(v) is not int or not 0 <= v <= 9 for v in precisions.values()):
@@ -264,7 +276,9 @@ def main():
             auto_compact_bytes=args.auto_compact_bytes,
             auto_compact_interval=args.auto_compact_interval,
             auto_pack_bytes=args.auto_pack_bytes,
-            auto_pack_interval=args.auto_pack_interval) as index:
+            auto_pack_interval=args.auto_pack_interval,
+            fission_cell_capacity=args.fission_cell_capacity,
+            fission_max_cells=args.fission_max_cells) as index:
         server = AnchorServer((args.host, args.port), index, workers=args.workers,
             nprobe=args.nprobe, rerank=args.rerank, memory_bytes=args.memory_bytes,
             calibration=json.load(open(args.calibration)) if args.calibration else None,

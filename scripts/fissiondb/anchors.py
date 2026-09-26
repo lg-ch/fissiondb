@@ -17,6 +17,7 @@ import operator
 import re
 import hashlib
 import struct
+import os
 from .metatypes import encode_meta, compile_where
 
 import numpy as np
@@ -37,6 +38,10 @@ _lib.anchor_index_dim.argtypes = [C.c_void_p]
 _lib.anchor_index_dim.restype = C.c_int
 _lib.anchor_index_bytes.argtypes = [C.c_void_p]
 _lib.anchor_index_bytes.restype = C.c_uint64
+_lib.anchor_index_enable_fission.argtypes = [C.c_void_p, C.c_uint32, C.c_uint32]
+_lib.anchor_index_enable_fission.restype = C.c_int
+_lib.anchor_index_fission_stats.argtypes = [C.c_void_p, C.POINTER(C.c_uint64), C.POINTER(C.c_double)]
+_lib.anchor_index_fission_stats.restype = C.c_int
 _lib.anchor_query_create.argtypes = [C.c_void_p, C.c_int, C.c_int, C.c_int,
                                    C.c_uint64, C.c_char_p, C.c_int]
 _lib.anchor_query_create.restype = C.c_void_p
@@ -123,7 +128,8 @@ class IdempotencyConflict(ValueError):
 class AnchorIndex:
     def __init__(self, directory, base_path=None, *, int8=True, live=False,
                  live_dir=None, float_specs=None, auto_compact_bytes=0, auto_compact_interval=30,
-                 residual_dir=None, auto_pack_bytes=0, auto_pack_interval=30):
+                 residual_dir=None, auto_pack_bytes=None, auto_pack_interval=30,
+                 fission_cell_capacity=None, fission_max_cells=300_000):
         self.directory = Path(directory).resolve()
         self.int8_mode = bool(int8)
         self.base_path = Path(base_path).resolve() if base_path is not None else None
@@ -134,6 +140,13 @@ class AnchorIndex:
         self._packer = None
         self._packing_lock = threading.Lock()
         self.live_dir = None
+        if fission_cell_capacity is not None:
+            fission_cell_capacity=operator.index(fission_cell_capacity)
+            fission_max_cells=operator.index(fission_max_cells)
+            if not 64 <= fission_cell_capacity <= 65536 or not 2 <= fission_max_cells <= 1_000_000:
+                raise ValueError('Invalid fission cell or memory capacity')
+            if not (live or live_dir is not None) or residual_dir is None:
+                raise ValueError('Automatic fission requires live and residual storage')
         self._handle = _lib.anchor_index_open(str(directory).encode(),
             str(base_path).encode() if base_path is not None else None, bool(int8))
         if not self._handle:
@@ -155,11 +168,19 @@ class AnchorIndex:
                 self._handle = None
                 raise OSError('Cannot open live overlay: locked, corrupt, mismatched index or IO failure')
         self.dim = _lib.anchor_index_dim(self._handle)
+        if fission_cell_capacity is not None:
+            if _lib.anchor_index_enable_fission(self._handle,fission_cell_capacity,fission_max_cells):
+                self._finalizer();self._handle=None
+                raise OSError('Cannot enable fission: mismatched saved configuration or IO failure')
+        values=(C.c_uint64*8)();timings=(C.c_double*3)()
+        self.fission = _lib.anchor_index_fission_stats(self._handle,values,timings)==0
         # Constant-cost starting budget; no GT, fitting, or scan on ingestion.
         metadata = (self.directory / "meta.txt").read_text().split()
         self.indexed_dim = int(metadata[1])
         self.default_nprobe = min(int(metadata[0]), max(1, self.indexed_dim // 2))
+        if self.fission:self.default_nprobe=1536
         self.memory_bytes = _lib.anchor_index_bytes(self._handle)
+        if auto_pack_bytes is None:auto_pack_bytes=256*1024*1024 if self.fission else 0
         if auto_compact_bytes:
             from .anchor_maintenance import AutoCompactor
             try:
@@ -175,6 +196,46 @@ class AnchorIndex:
             except Exception:
                 self.close()
                 raise
+
+    @classmethod
+    def create(cls, directory, dim, *, cell_capacity=2048, max_cells=300_000,
+               auto_pack_bytes=256*1024*1024, **kwargs):
+        """Create an empty local collection with automatic live-cell fission.
+
+        The small empty frozen header is a format bootstrap, not a training set.
+        Live representatives are chosen from inserted vectors and grow by splits.
+        """
+        dim=operator.index(dim)
+        if not 1<=dim<=1024:raise ValueError('Dimensions must be in 1..1024')
+        if not 64<=operator.index(cell_capacity)<=65536 or not 2<=operator.index(max_cells)<=1_000_000:
+            raise ValueError('Invalid fission capacity')
+        directory=Path(directory).resolve();directory.mkdir(parents=True,exist_ok=False)
+        padded=max(8,1<<(dim-1).bit_length())
+        centers=np.zeros((2,padded),'<f4');centers[0,0]=1;centers[1,0]=-1
+        files={'meta.txt':f'2 {padded} 2 1 999 0 52 {padded} {dim}\n'.encode(),
+               'anchors.bin':centers.tobytes(),'offs.bin':np.zeros(3,'<u8').tobytes(),
+               'scale.bin':np.ones(padded,'<f4').tobytes(),'blocks.bin':b'',
+               'base.f16bin':struct.pack('<II',0,dim)}
+        for name,data in files.items():
+            with (directory/name).open('xb') as f:f.write(data);f.flush();os.fsync(f.fileno())
+        with cls(directory,directory/'base.f16bin') as frozen:
+            frozen.build_residual(directory/'residual')
+        return cls(directory,directory/'base.f16bin',residual_dir=directory/'residual',
+                   live_dir=directory/'live',fission_cell_capacity=cell_capacity,
+                   fission_max_cells=max_cells,auto_pack_bytes=auto_pack_bytes,**kwargs)
+
+    @property
+    def fission_stats(self):
+        with self._lock:
+            self._require_live()
+            if not self.fission:return None
+            values=(C.c_uint64*8)();timings=(C.c_double*3)()
+            if _lib.anchor_index_fission_stats(self._handle,values,timings):
+                raise OSError('Fission state unavailable')
+            result=dict(zip(('cells','splits','rewritten','records','largest_cell',
+                             'owned_bytes','arena_bytes','max_cells'),map(int,values)))
+            result.update(zip(('split_total_ms','split_max_ms','last_split_ms'),map(float,timings)))
+            return result
 
     @property
     def unpacked_bytes(self):
@@ -197,10 +258,11 @@ class AnchorIndex:
                 raise OSError('Live snapshot failed or destination already contains a snapshot')
 
     def pack_live(self):
-        """Build a compressed live snapshot while insertion/search continue.
+        """Persist a derived live snapshot or an adaptive-cell checkpoint.
 
-        The authoritative journal is retained. Snapshot invalidation by journal
-        compaction fails the attempt safely; the caller may retry later.
+        Automatic fission checkpoints hold the live write lock; readers and
+        writers wait. Fixed-cell packing allows concurrent mutations, but
+        compaction may invalidate its attempt. The journal remains authoritative.
         """
         with self._packing_lock:
             with self._lock:
@@ -239,7 +301,7 @@ class AnchorIndex:
             if not self._handle:
                 raise RuntimeError('Index is closed')
             count = _lib.anchor_index_count(self._handle)
-            if count == 0:
+            if count == 2**64-1:
                 raise OSError('Live state unavailable; reopen the index')
             return count
 
@@ -336,7 +398,7 @@ class AnchorIndex:
         with self._lock:
             self._require_live()
             count = _lib.anchor_index_count(self._handle)
-            if count == 0:
+            if count == 2**64-1:
                 raise OSError('Live state unavailable; reopen the index')
             if doc_id >= count:
                 raise ValueError('Unknown document ID')
@@ -352,6 +414,13 @@ class AnchorIndex:
             result = dict(zip(('allocated_count', 'deleted_count', 'maintenance_bytes',
                                'journal_bytes', 'idempotency_records'), values))
             result['active_count'] = result['allocated_count'] - result['deleted_count']
+            if self.fission:
+                numbers=(C.c_uint64*8)();timings=(C.c_double*3)()
+                if _lib.anchor_index_fission_stats(self._handle,numbers,timings):
+                    raise OSError('Fission state unavailable')
+                result['fission'] = dict(zip(('cells','splits','rewritten','records','largest_cell',
+                    'owned_bytes','arena_bytes','max_cells'),map(int,numbers)))
+                result['fission'].update(zip(('split_total_ms','split_max_ms','last_split_ms'),map(float,timings)))
             return result
 
     @property
@@ -401,7 +470,7 @@ class AnchorIndex:
         with self._lock:
             self._require_live()
             count = _lib.anchor_index_count(self._handle)
-            if count == 0:
+            if count == 2**64-1:
                 raise OSError('Live state unavailable; reopen the index')
             if doc_id >= count:
                 raise ValueError('Unknown document ID')

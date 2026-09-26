@@ -24,7 +24,8 @@ static void live_pack_open(AnchorLive* l) {
 }
 uint64_t anchor_live_unpacked_bytes(AnchorLive* l) {
     if(!l||anchor_live_read_lock(l))return UINT64_MAX;
-    uint64_t n=l->end-(l->pack_end?l->pack_end:sizeof(LiveHeader));anchor_live_read_unlock(l);return n;
+    uint64_t cutoff=l->fission?live_fission_end(l):l->pack_end;
+    uint64_t n=l->end-(cutoff?cutoff:sizeof(LiveHeader));anchor_live_read_unlock(l);return n;
 }
 int anchor_live_pack(AnchorLive* l,AnchorLiveEncode encode,void* user) {
     if(!l||!encode||l->dim>1024||pthread_mutex_trylock(&l->pack_lock))return -1;

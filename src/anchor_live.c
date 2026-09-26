@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <xxhash.h>
+#include <time.h>
 
 #define LIVE_MAGIC UINT64_C(0x314C564152474E4D)
 #define RECORD_MAGIC 0x31524c41u
@@ -61,9 +62,14 @@ struct AnchorLive {
     uint64_t* pack_offsets;
     pthread_mutex_t pack_lock;
     pthread_rwlock_t lock;
+    struct LiveFission* fission;
 };
 static void live_pack_clear(AnchorLive*);
 static void live_pack_open(AnchorLive*);
+static int live_fission_observe(AnchorLive*,const LiveRecord*,uint64_t);
+static void live_fission_close(AnchorLive*);
+static int live_fission_rebuild(AnchorLive*);
+static uint64_t live_fission_end(const AnchorLive*);
 static int write_all(int fd, const void* data, size_t n, uint64_t off) {
     const char* p=data;
     while(n) {
@@ -234,10 +240,12 @@ static int apply_record(AnchorLive* l,LiveRecord* r,uint64_t offset) {
     if(extra&&request_add(l,r->id,(uint8_t*)(r+1)+vector_bytes,(uint8_t*)(r+1)+vector_bytes+32))return -1;
     int rc=replace_tags(l,r->id,keys,(int)r->nkeys,r->kind==2||r->kind==7);
     if(!rc&&(r->kind==2||r->kind==7))l->maintenance_bytes+=r->bytes;
+    if(!rc&&is_vector&&l->fission)rc=live_fission_observe(l,r,offset);
     return rc;
 }
 void anchor_live_close(AnchorLive* l) {
     if(!l)return;
+    live_fission_close(l);
     live_pack_clear(l);pthread_mutex_destroy(&l->pack_lock);
     if(l->rows_fd>=0)close(l->rows_fd);
     if(l->log_fd>=0)close(l->log_fd);
@@ -604,6 +612,7 @@ int anchor_live_compact(AnchorLive* l,uint64_t* before,uint64_t* after) {
     if(renameat(l->dir_fd,".rows.compact",l->dir_fd,"live.rows")){l->poisoned=1;goto done;}
     int old_rows=l->rows_fd;l->rows_fd=rows_new;rows_new=-1;close(old_rows);
     if(fsync(l->dir_fd)){l->poisoned=1;goto done;}
+    if(l->fission&&live_fission_rebuild(l)){l->poisoned=1;goto done;}
     *after=end;rc=0;
 done:
     if(fd>=0)close(fd);
@@ -678,6 +687,7 @@ static int live_search_tail(const AnchorLive* l,const uint32_t* cells,int ncells
 }
 
 #include "anchor_live_pack.inc"
+#include "anchor_live_fission.inc"
 int anchor_live_search(const AnchorLive* l,const uint32_t* cells,int ncells,const float* q,const roaring_bitmap_t* allowed,uint32_t* ids,float* scores,int count,int capacity,uint64_t* entries,uint64_t* bytes) {
     return live_search_tail(l,cells,ncells,q,allowed,ids,scores,count,capacity,entries,bytes,0);
 }

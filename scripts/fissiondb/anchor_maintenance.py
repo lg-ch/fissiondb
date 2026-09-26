@@ -44,7 +44,10 @@ class AutoCompactor:
 
 
 class AutoPacker(AutoCompactor):
-    """Pack the accumulated vector journal without blocking normal ingestion."""
+    """Schedule live packing or a fission checkpoint at a byte threshold.
+
+    Adaptive checkpoints acquire the live write lock and can delay queries.
+    """
     def __init__(self, index, growth_bytes, interval):
         if index.residual_dir is None:
             raise ValueError('Automatic packing requires residual mode')

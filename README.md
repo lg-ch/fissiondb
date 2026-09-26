@@ -5,18 +5,21 @@ compact cell representatives in memory and streams compressed vector codes from
 local SSD storage. It reranks a short candidate list against the original vectors.
 
 The engine is written in C, with a Python API and an HTTP service. It supports
-live insertions, updates, durable deletions and native metadata filters.
+live insertions with automatic cell splitting, updates, durable deletions and
+native metadata filters. An empty collection grows its representatives as data
+arrives, without an offline training set.
 
 ## Current architecture
 
 1. Score the in-memory int8 cell representatives and select cells to explore.
-2. Read their compact residual codes in overlapping batches of up to 64 cells.
+2. Read their compact residual codes from SSD.
 3. Apply metadata filters before candidate admission and rank eligible codes.
 4. Read the best candidates' original vectors and compute exact cosine scores.
 
 Residuals use up to 512 bits per vector, with an encoding adapted to dimensions
-1–1024. A disk record occupies 72 bytes including its ID and scales; multiple
-cell assignments duplicate records. Exact reranking defaults to 400 candidates.
+1–1024. Frozen records occupy 72 bytes; live records occupy 84 bytes including
+journal offsets and checksums. Multiple cell assignments duplicate records.
+Exact reranking defaults to 400 candidates.
 
 Each query has its own bounded scratch buffers and IO context. The index is
 shared. The native engine uses ARM NEON or runtime-selected x86 AVX2/F16C kernels.
@@ -50,19 +53,44 @@ python3 -m venv .venv
 python -m pip install .
 ```
 
-For an existing index and its original vectors:
+Create an empty collection and start ingesting through the HTTP API:
+
+```sh
+fissiondb-build create --index /data/collection --dim 768
+fissiondb-serve --collection /data/collection --workers 4
+```
+
+Or create and populate a collection from Python:
+
+```python
+from fissiondb import AnchorIndex
+
+with AnchorIndex.create('/data/collection', dim=768) as index:
+    ids = index.insert_batch(vectors, group_commit=True)
+    with index.context(nprobe=1536, rerank=400) as query:
+        ids, scores, stats = query.search(query_vector, top_k=10)
+    print(index.fission_stats)
+```
+
+The default cell capacity is 2,048 assignments. Overflowing cells split into two;
+representatives and residuals update under the live write lock. Queries wait
+during a split. A configurable cell-count ceiling limits representative growth.
+
+For an existing frozen index and its original vectors:
 
 ```sh
 fissiondb-build convert --index /data/index --base /data/base.f16bin --output /data/residual
 fissiondb-serve --index /data/index --base /data/base.f16bin \
-  --residual-dir /data/residual --live-dir /data/live --rerank 400
+  --residual-dir /data/residual --live-dir /data/live --rerank 400 \
+  --fission-cell-capacity 2048
 ```
 
 ```python
 from fissiondb import AnchorIndex
 
 with AnchorIndex('/data/index', '/data/base.f16bin',
-                 residual_dir='/data/residual', live_dir='/data/live') as index:
+                 residual_dir='/data/residual', live_dir='/data/live',
+                 fission_cell_capacity=2048) as index:
     with index.context(nprobe=1536, rerank=400, threads=1) as query:
         ids, scores, stats = query.search(query_vector, top_k=10,
                                          where={'language': 'fr'})
@@ -76,16 +104,18 @@ with AnchorIndex('/data/index', '/data/base.f16bin',
 
 - Dimensions 1–1024 are supported. Recall depends on the data, filters and search
   budgets; a dimension-based default is a starting point, not a quality guarantee.
-- Cell representatives are currently fixed at index build. Live mutations use a
-  durable journal and a compressed snapshot; the serving engine does not yet
-  split cells or create representatives automatically.
+- New collections split live cells automatically. Existing frozen cells remain
+  immutable; their results merge with an independently routed live index.
+  The 113M benchmark above measures frozen retrieval, not this new live path.
 - Filters support equality, membership, conjunction, numeric ranges, existence
   and regex over metadata values. Regex matching is not full-text retrieval.
   Metadata postings consume RAM and need separate sizing.
 - Deletion hides records durably. Frozen files are immutable; their space is not
   reclaimed by deleting a document. Compaction reclaims obsolete live records.
 - The measured low-memory result concerns one query context. Concurrent query
-  throughput and large live populations require additional validation.
+  throughput and large live populations require additional validation. The live
+  journal and its derived row file currently store padded float32 vectors;
+  storage costs differ from the compact frozen format.
 
 This is a development release. The default documented deployment uses local
 storage. [Run the tests](docs/OPERATIONS.md#validation) before deployment.

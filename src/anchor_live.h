@@ -5,6 +5,20 @@
 typedef struct AnchorLive AnchorLive;
 typedef int (*AnchorLiveEncode)(void*,uint32_t,const float*,uint8_t*);
 typedef float (*AnchorLiveScore)(void*,uint32_t,const uint8_t*);
+/* Adaptive live cells are derived from the durable journal. All callbacks run
+   under its read/write lock; they must not acquire that lock again. */
+typedef struct {
+    int (*dot)(const int8_t*,const int8_t*,int);
+    int (*encode)(void*,const float*,const int8_t*,uint8_t*);
+    void (*sketch)(void*,const float*,float*);
+} AnchorFissionOps;
+typedef float (*AnchorFissionScore)(void*,const int8_t*,const uint8_t*);
+int anchor_live_enable_fission(AnchorLive*,uint32_t,uint32_t,const AnchorFissionOps*,void*);
+int anchor_live_fission_config(AnchorLive*,uint32_t*,uint32_t*);
+int anchor_live_fission_stats(AnchorLive*,uint64_t values[8],double timings[3]);
+int anchor_live_fission_checkpoint(AnchorLive*);
+int anchor_live_search_fission(const AnchorLive*,int,const float*,const roaring_bitmap_t*,uint32_t*,float*,int,int,uint64_t*,uint64_t*,AnchorFissionScore,void*);
+int anchor_live_has_fission(const AnchorLive*);
 int anchor_live_pack(AnchorLive*,AnchorLiveEncode,void*);
 int anchor_live_snapshot(AnchorLive*,const char*);
 uint64_t anchor_live_unpacked_bytes(AnchorLive*);

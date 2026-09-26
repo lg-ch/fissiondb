@@ -74,8 +74,24 @@ static int residual_encode_live(void* user,uint32_t cell,const float* v,uint8_t*
     if(residual_anchor(idx,cell,a,ar))return -1;
     return residual_encode_vector(idx,v,a,ar,code);
 }
+static int residual_encode_fission(void*user,const float*v,const int8_t*center,uint8_t*code){
+    const AnchorIndex*idx=user;float a[1024],ar[1024];double norm=0;
+    for(int d=0;d<idx->meta.dim;d++)norm+=(int)center[d]*(int)center[d];
+    if(norm<=0)return -1;
+    float scale=1/sqrt(norm);for(int d=0;d<idx->meta.dim;d++)a[d]=center[d]*scale;
+    rot_seeded(a,ar,idx->sgn,idx->meta.dim);return residual_encode_vector(idx,v,a,ar,code);
+}
+static void residual_sketch_fission(void*user,const float*v,float*out){const AnchorIndex*idx=user;rot_seeded(v,out,idx->sgn,idx->meta.dim);}
+int anchor_index_enable_fission(AnchorIndex*idx,uint32_t cap,uint32_t maximum){
+    if(!idx||!idx->live||idx->residual_fd<0||__atomic_load_n(&idx->contexts,__ATOMIC_SEQ_CST))return -1;
+    if(anchor_live_has_fission(idx->live)){uint32_t saved_cap=0,saved_max=0;return anchor_live_fission_config(idx->live,&saved_cap,&saved_max)==1&&cap==saved_cap&&maximum==saved_max?0:-1;}
+    AnchorFissionOps ops={doti8,residual_encode_fission,residual_sketch_fission};
+    return anchor_live_enable_fission(idx->live,cap,maximum,&ops,idx);
+}
+int anchor_index_fission_stats(AnchorIndex*idx,uint64_t values[8],double timings[3]){return idx?anchor_live_fission_stats(idx->live,values,timings):-1;}
 int anchor_index_pack_live(AnchorIndex* idx) {
     if(!idx||idx->residual_fd<0||!idx->live)return -1;
+    if(anchor_live_has_fission(idx->live))return anchor_live_fission_checkpoint(idx->live);
     return anchor_live_pack(idx->live,residual_encode_live,idx);
 }
 uint64_t anchor_index_unpacked_bytes(AnchorIndex* idx){return idx?anchor_live_unpacked_bytes(idx->live):UINT64_MAX;}
@@ -99,6 +115,23 @@ static float residual_score_live(void* user,uint32_t cell,const uint8_t* code) {
     else if(bits==2)dot=2*score_tq2(code+4,c->c8,c->c8+stride,c->c8+2*stride,c->c8+3*stride,cd)+state->qsum;
     else dot=2*score_tq4(code+4,c->c8,c->c8+stride,cd)+state->qsum;
     return dot*state->qs*h2f(g)+h2f(b)*state->qa;
+}
+typedef struct {ResidualLiveScore score;const int8_t* center;} ResidualFissionScore;
+static float residual_score_fission(void*user,const int8_t*center,const uint8_t*code){
+    ResidualFissionScore*s=user;ResidualLiveScore*state=&s->score;AnchorQuery*c=state->query;const AnchorIndex*idx=c->index;
+    if(s->center!=center){
+        int dim=idx->meta.dim,cd=idx->residual_cdim,streams=8/idx->residual_bits,stride=cd/streams;
+        float ar[1024],weights[512],mx=0;double norm=0;
+        for(int d=0;d<dim;d++)norm+=(int)center[d]*(int)center[d];
+        if(norm<=0)return NAN;
+        float scale=1/sqrt(norm);for(int d=0;d<dim;d++)c->vf[d]=center[d]*scale;
+        rot_seeded(c->vf,ar,idx->sgn,dim);state->qa=dotf(c->qn,c->vf,dim);
+        for(int d=0;d<cd;d++){weights[d]=c->qr[d]-state->qa*ar[d];mx=fmaxf(mx,fabsf(weights[d]));}
+        state->qs=mx/127;state->qsum=0;
+        for(int d=0;d<cd;d++){int8_t v=(int8_t)lrintf(weights[d]/(mx+1e-9f)*127);state->qsum+=v;c->c8[(d%streams)*stride+d/streams]=v;}
+        s->center=center;state->cell=0;
+    }
+    return residual_score_live(state,0,code);
 }
 
 #include "anchor_residual_io.inc"
@@ -130,7 +163,10 @@ static int anchor_residual_search(AnchorQuery* c,const float* q,int top_k,uint32
         for(int i=0;i<nf;i++){c->merge_ids[i]=c->fin_all[i].id;c->merge_scores[i]=c->fin_all[i].s;}
         uint32_t* cells=(uint32_t*)c->read_off;for(int i=0;i<probes;i++)cells[i]=c->cand[i].id;
         ResidualLiveScore state={c,UINT32_MAX,0,0,0};
-        nf=anchor_live_search_packed(idx->live,cells,probes,c->qn,c->allowed,c->merge_ids,c->merge_scores,nf,c->rerank,&st->entries,&st->bytes,residual_score_live,&state);
+        if(anchor_live_has_fission(idx->live)){
+            ResidualFissionScore dynamic={{c,0,0,0,0},NULL};
+            nf=anchor_live_search_fission(idx->live,c->nprobe,c->qn,c->allowed,c->merge_ids,c->merge_scores,nf,c->rerank,&st->entries,&st->bytes,residual_score_fission,&dynamic);
+        }else nf=anchor_live_search_packed(idx->live,cells,probes,c->qn,c->allowed,c->merge_ids,c->merge_scores,nf,c->rerank,&st->entries,&st->bytes,residual_score_live,&state);
         if(nf<0)return -1;
         for(int i=0;i<nf;i++)c->fin_all[i]=(ScId){c->merge_scores[i],c->merge_ids[i]};
     }

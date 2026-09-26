@@ -237,7 +237,7 @@ def test_batch_reports_acknowledged_prefix(frozen, tmp_path, monkeypatch):
             index.insert_batch(frozen[2][:3])
         assert error.value.committed_ids == [5120]
         assert index.count == 5121
-        monkeypatch.setattr(_lib, 'anchor_index_count', lambda handle: 0)
+        monkeypatch.setattr(_lib, 'anchor_index_count', lambda handle: 2**64-1)
         with pytest.raises(OSError):
             _ = index.count
         with pytest.raises(OSError):

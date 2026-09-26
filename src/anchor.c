@@ -489,7 +489,7 @@ static int meta_load(const char* dir, AMeta* m) {
     m->cdim = (r >= 8 && cd > 0) ? cd : m->dim;
     return r >= 7 && m->input_dim >= 1 && m->input_dim <= m->dim && m->K > 0 && m->dim >= 8 && m->dim <= 65536 &&
         !(m->dim & (m->dim-1)) && m->M >= 1 && m->M <= 4 && m->M <= m->K &&
-        m->n >= m->K && isfinite(m->eps) && m->eps >= 0 &&
+        (m->n >= m->K || m->n == 0) && isfinite(m->eps) && m->eps >= 0 &&
         (m->tqbits == 1 || m->tqbits == 2 || m->tqbits == 4) &&
         m->cdim >= 8 && m->cdim <= m->dim && m->cdim % 8 == 0 ? 0 : -1;
 }
@@ -1218,7 +1218,7 @@ AnchorIndex* anchor_index_open(const char* dir, const char* base_path, int a8_mo
     int dim = idx->meta.dim, K = idx->meta.K, cd = idx->meta.cdim;
     int bits = idx->meta.tqbits;
     if (K < 1 || dim < 8 || dim > 65536 || (dim & (dim-1)) || cd < 8 || cd > dim || cd % 8 ||
-        (bits != 1 && bits != 2 && bits != 4) || idx->meta.n < K) goto fail;
+        (bits != 1 && bits != 2 && bits != 4) || (idx->meta.n < K && idx->meta.n != 0)) goto fail;
     size_t total = (size_t)K * dim;
     char path[1024]; snprintf(path, sizeof(path), "%s/anchors.bin", dir);
     if (a8_mode) {
@@ -1263,6 +1263,11 @@ AnchorIndex* anchor_index_open(const char* dir, const char* base_path, int a8_mo
     snprintf(path, sizeof(path), "%s/blocks.bin", dir);
     idx->bfd = open(path, O_RDONLY);
     if (base_path) idx->basefd = open(base_path, O_RDONLY);
+    if(idx->meta.n==0){
+        uint32_t header[2];struct stat empty;
+        if(idx->offs[K]!=0||idx->basefd<0||fstat(idx->basefd,&empty)||empty.st_size!=8||
+           pread(idx->basefd,header,8,0)!=8||header[0]!=0||header[1]!=(uint32_t)idx->meta.input_dim)goto fail;
+    }
     idx->bytes = sizeof(*idx) + total*(a8_mode ? 1 : 4) + ((uint64_t)K+1)*8 + dim*5;
     return idx;
 fail:
@@ -1289,10 +1294,12 @@ int anchor_index_enable_live(AnchorIndex* idx,const char* dir) {
     idx->live=anchor_live_open(dir,fingerprint,idx->meta.n,idx->meta.dim,idx->meta.K,idx->meta.M);
     if(!idx->live)return -1;
     idx->bytes+=(uint64_t)idx->meta.K*16+(8192+65536)*sizeof(void*);
+    uint32_t cap=0,maximum=0;int fission_config=anchor_live_fission_config(idx->live,&cap,&maximum);
+    if(fission_config<0||(fission_config&&anchor_index_enable_fission(idx,cap,maximum)))return -1;
     return 0;
 }
 uint64_t anchor_index_count(AnchorIndex* idx) {
-    if(!idx||anchor_live_read_lock(idx->live))return 0;
+    if(!idx||anchor_live_read_lock(idx->live))return UINT64_MAX;
     uint64_t count=idx->meta.n+anchor_live_count(idx->live);
     anchor_live_read_unlock(idx->live);return count;
 }
@@ -1405,7 +1412,7 @@ void anchor_query_close(AnchorQuery* ctx) {
 AnchorQuery* anchor_query_create(const AnchorIndex* idx, int np, int rr, int threads,
                                 uint64_t memory, const char* url, int hedge) {
     if (idx && idx->residual_fd >= 0 && (threads != 1 || url)) return NULL;
-    if (!idx || np < 1 || np > idx->meta.K || rr < 1 || rr > 1000000 ||
+    if (!idx || np < 1 || np > 1000000 || (np > idx->meta.K && !anchor_live_has_fission(idx->live)) || rr < 1 || rr > 1000000 ||
         threads < 1 || threads > 256 || (!url && ((idx->bfd < 0 && idx->residual_fd < 0) || idx->basefd < 0))) return NULL;
     AnchorQuery* ctx = calloc(1, sizeof(*ctx));
     if (!ctx) return NULL;
@@ -1438,6 +1445,8 @@ AnchorQuery* anchor_query_create(const AnchorIndex* idx, int np, int rr, int thr
 #undef ANC_ALLOC
     if(idx->residual_fd>=0&&idx->live){
         uint64_t scratch=(uint64_t)rr*(idx->meta.M*16+4)+84*4096+4096;
+        if(anchor_live_has_fission(idx->live))
+            scratch=(uint64_t)rr*(2*16+4)+(uint64_t)np*16+84*512+(uint64_t)dim*4;
         if(memory&&(owned>memory||scratch>memory-owned))goto fail;
         owned+=scratch;
     }
@@ -1477,12 +1486,14 @@ int anchor_query_adapt_stats(AnchorQuery* c,double out[3]) {
     out[0]=c->policy_used;out[1]=c->policy_limited;out[2]=c->policy_observed_gap;return 0;
 }
 static int anchor_adapt_probes(AnchorQuery* c) {
-    if(!c->policy_min){c->policy_used=c->nprobe;return c->nprobe;}
+    int maximum=c->nprobe<c->index->meta.K?c->nprobe:c->index->meta.K;
+    if(!c->policy_min){c->policy_used=maximum;return maximum;}
     int n=c->allowed?c->policy_filtered_min:c->policy_min;
+    if(n>maximum)n=maximum;
     float denominator=fmaxf(fabsf(c->cand[0].s),1e-9f);
     c->policy_observed_gap=(c->cand[0].s-c->cand[n-1].s)/denominator;
-    while(n<c->nprobe&&(c->cand[0].s-c->cand[n-1].s)/denominator<c->policy_gap)
-        n=n>c->nprobe/2?c->nprobe:n*2;
+    while(n<maximum&&(c->cand[0].s-c->cand[n-1].s)/denominator<c->policy_gap)
+        n=n>maximum/2?maximum:n*2;
     uint64_t used=0;int end=0;
     for(;end<n;end++) {
         uint32_t cell=c->cand[end].id;
