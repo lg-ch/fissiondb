@@ -43,6 +43,20 @@ cell, split timings, arena size and memory owned by the adaptive structure.
 This memory counter excludes query buffers, journal bookkeeping and page cache.
 Split counts persist; timing counters restart when the process reopens.
 
+Fission runs on one native background worker. New writes are acknowledged after
+durable commit and remain searchable on the parent while daughters are prepared.
+`index.flush_fission()` waits for the queue to drain without holding the reader
+lock. The cell capacity is an eventual target: a pending split can temporarily
+exceed it. The cell-count ceiling can prevent further splitting altogether.
+An overloaded split queue applies backpressure to vector writes, not readers.
+
+Progress counters include `pending_cells`, `preparing`, `queries_during_prepare`,
+`delta_records`, `backpressure_waits`, `scratch_bytes` and `peak_scratch_bytes`.
+Scratch counters exclude the worker's 1 MiB stack and representative-array growth.
+`publish_max_ms` measures the final descriptor swap with the write lock held;
+it excludes lock acquisition, chunk reservations, journal commits and maintenance.
+End-to-end query latency must still be measured under the intended workload.
+
 To reopen from Python, supply the collection directory, its `base.f16bin`,
 `residual` and `live` paths to `AnchorIndex`, as in the examples below. Fission
 configuration loads automatically. To add adaptive live ingestion to an existing
@@ -121,8 +135,10 @@ remain in the authoritative journal.
 For adaptive collections, `/pack` and `index.pack_live()` persist a checkpoint.
 Automatic checkpointing defaults to a 256 MiB journal-growth threshold checked
 every 30 seconds; `--auto-pack-bytes 0` disables it. Checkpoints allow retired
-code chunks to be reused but do not shrink the arena file. Fission, checkpointing
-and compaction hold the live write lock, so requests can wait for maintenance.
+code chunks to be reused but do not shrink the arena file. Split preparation
+overlaps readers; publication briefly holds the live write lock. Checkpointing
+and compaction also acquire the worker's maintenance mutex and hold the live
+write lock, so requests can still wait for those operations.
 Compaction rebuilds adaptive cells and can be expensive on a large live corpus.
 Close normally to attempt a final checkpoint; journal recovery also handles
 unclean shutdowns. Restore rebuilds derived files from the committed journal.
@@ -172,4 +188,7 @@ python -m build
 The test suite exercises query correctness, residuals, dimensions, filters, live
 mutations, automatic fission, concurrent readers, deletion, journal recovery,
 cache corruption, packing, compaction and backup/restore.
+Concurrency tests pause a worker with unpublished daughters and require reads,
+writes and deletions to remain visible; they also exercise crashes and worker
+failure while a writer is waiting for backpressure to clear.
 Small-corpus correctness tests do not establish large-corpus recall or throughput.

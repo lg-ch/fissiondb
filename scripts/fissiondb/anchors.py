@@ -42,6 +42,10 @@ _lib.anchor_index_enable_fission.argtypes = [C.c_void_p, C.c_uint32, C.c_uint32]
 _lib.anchor_index_enable_fission.restype = C.c_int
 _lib.anchor_index_fission_stats.argtypes = [C.c_void_p, C.POINTER(C.c_uint64), C.POINTER(C.c_double)]
 _lib.anchor_index_fission_stats.restype = C.c_int
+_lib.anchor_index_fission_progress.argtypes = _lib.anchor_index_fission_stats.argtypes
+_lib.anchor_index_fission_progress.restype = C.c_int
+_lib.anchor_index_fission_flush.argtypes = [C.c_void_p]
+_lib.anchor_index_fission_flush.restype = C.c_int
 _lib.anchor_query_create.argtypes = [C.c_void_p, C.c_int, C.c_int, C.c_int,
                                    C.c_uint64, C.c_char_p, C.c_int]
 _lib.anchor_query_create.restype = C.c_void_p
@@ -235,7 +239,20 @@ class AnchorIndex:
             result=dict(zip(('cells','splits','rewritten','records','largest_cell',
                              'owned_bytes','arena_bytes','max_cells'),map(int,values)))
             result.update(zip(('split_total_ms','split_max_ms','last_split_ms'),map(float,timings)))
+            if _lib.anchor_index_fission_progress(self._handle,values,timings):
+                raise OSError('Fission progress unavailable')
+            result.update(zip(('pending_cells','preparing','queries_during_prepare','delta_records',
+                              'backpressure_waits','scratch_bytes','peak_scratch_bytes','publishes'),map(int,values)))
+            result.update(zip(('publish_total_ms','publish_max_ms','last_publish_ms'),map(float,timings)))
             return result
+
+    def flush_fission(self):
+        """Wait for pending splits while queries continue on published cells."""
+        with self._lock:
+            self._require_live()
+            if not self.fission:raise ValueError('Automatic fission is not enabled')
+            if _lib.anchor_index_fission_flush(self._handle):
+                raise OSError('Fission failed; reopen the index')
 
     @property
     def unpacked_bytes(self):
@@ -421,6 +438,11 @@ class AnchorIndex:
                 result['fission'] = dict(zip(('cells','splits','rewritten','records','largest_cell',
                     'owned_bytes','arena_bytes','max_cells'),map(int,numbers)))
                 result['fission'].update(zip(('split_total_ms','split_max_ms','last_split_ms'),map(float,timings)))
+                if _lib.anchor_index_fission_progress(self._handle,numbers,timings):
+                    raise OSError('Fission progress unavailable')
+                result['fission'].update(zip(('pending_cells','preparing','queries_during_prepare','delta_records',
+                    'backpressure_waits','scratch_bytes','peak_scratch_bytes','publishes'),map(int,numbers)))
+                result['fission'].update(zip(('publish_total_ms','publish_max_ms','last_publish_ms'),map(float,timings)))
             return result
 
     @property

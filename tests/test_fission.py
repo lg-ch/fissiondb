@@ -13,12 +13,15 @@ from fissiondb import AnchorIndex
 from fissiondb.backup import create as backup, restore
 
 def reopen(directory,**kwargs):
-    return AnchorIndex(directory,directory/'base.f16bin',residual_dir=directory/'residual',live_dir=directory/'live',**kwargs)
+    index=AnchorIndex(directory,directory/'base.f16bin',residual_dir=directory/'residual',live_dir=directory/'live',**kwargs)
+    index.flush_fission()
+    return index
 
 def ingest(index,x,metadata=None):
     output=[]
     for i in range(0,len(x),128):
         output.extend(index.insert_batch(x[i:i+128],metadata[i:i+128] if metadata else None,group_commit=True))
+    if index.fission:index.flush_fission()
     return np.asarray(output)
 
 def exact(q,x,k=10,eligible=None):

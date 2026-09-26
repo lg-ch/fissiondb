@@ -70,6 +70,9 @@ static int live_fission_observe(AnchorLive*,const LiveRecord*,uint64_t);
 static void live_fission_close(AnchorLive*);
 static int live_fission_rebuild(AnchorLive*);
 static uint64_t live_fission_end(const AnchorLive*);
+static void live_vector_write_lock(AnchorLive*);
+static void live_fission_maintenance_lock(AnchorLive*);
+static void live_fission_maintenance_unlock(AnchorLive*);
 static int write_all(int fd, const void* data, size_t n, uint64_t off) {
     const char* p=data;
     while(n) {
@@ -336,7 +339,7 @@ static int commit_record(AnchorLive* l,const float* vector,const uint32_t* cells
     if(token){memcpy((char*)(r+1)+vector_bytes,token,32);memcpy((char*)(r+1)+vector_bytes+32,digest,32);}
     char* dest=(char*)(r+1)+vector_bytes+(token?64:0);
     for(int i=0;i<nkeys;i++){size_t n=strlen(keys[i])+1;memcpy(dest,keys[i],n);dest+=n;}
-    if(!locked)pthread_rwlock_wrlock(&l->lock);
+    if(!locked){if(vector)live_vector_write_lock(l);else pthread_rwlock_wrlock(&l->lock);}
     int rc=-1;
     if(l->poisoned)goto done;
     if(token) {
@@ -434,7 +437,7 @@ int anchor_live_append_batch(AnchorLive* l,int n,const float* vectors,const uint
         size_t bytes=0;for(int j=0;j<counts[i];j++){if(!key_valid(keys[total+j]))return -1;bytes+=strlen(keys[total+j])+1;}
         if(bytes>TAG_BYTES_MAX)return -1;
         total+=counts[i];}
-    pthread_rwlock_wrlock(&l->lock);int rc=-1,applied=0;total=0;
+    live_vector_write_lock(l);int rc=-1,applied=0;total=0;
     if(l->poisoned)goto done;
     for(int i=0;i<n;i++){
         rc=commit_record(l,vectors+(size_t)i*l->dim,cells+(size_t)i*l->copies,0,keys?keys+total:NULL,counts[i],ids+i,tokens?tokens[i]:NULL,digests?digests[i]:NULL,0,1,0);
@@ -471,6 +474,7 @@ uint64_t anchor_live_deleted_count(const AnchorLive* l){return l?roaring_bitmap_
    all contexts on one generation. Scratch space is O(cells + one record). */
 int anchor_live_compact(AnchorLive* l,uint64_t* before,uint64_t* after) {
     if(!l||!before||!after)return -1;
+    live_fission_maintenance_lock(l);
     pthread_rwlock_wrlock(&l->lock);
     int rc=-1,fd=-1,rows_new=-1,published=0;
     uint64_t* heads=NULL;LiveRecord* record=NULL;
@@ -619,7 +623,7 @@ done:
     if(!published&&l->dir_fd>=0)unlinkat(l->dir_fd,".live.compact",0);
     if(rows_new>=0)close(rows_new);
     if(l->dir_fd>=0)unlinkat(l->dir_fd,".rows.compact",0);
-    free(heads);free(record);pthread_rwlock_unlock(&l->lock);return rc;
+    free(heads);free(record);pthread_rwlock_unlock(&l->lock);live_fission_maintenance_unlock(l);return rc;
 }
 
 int anchor_live_keys(AnchorLive* l,char* dst,int cap) {

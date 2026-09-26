@@ -72,9 +72,11 @@ with AnchorIndex.create('/data/collection', dim=768) as index:
     print(index.fission_stats)
 ```
 
-The default cell capacity is 2,048 assignments. Overflowing cells split into two;
-representatives and residuals update under the live write lock. Queries wait
-during a split. A configurable cell-count ceiling limits representative growth.
+The default cell capacity is 2,048 assignments. A background worker prepares
+overflowing cells' daughters while queries continue on the published parent.
+Concurrent inserts remain searchable there until their codes have caught up;
+a short write lock publishes the daughters. A bounded backlog applies ingestion
+backpressure when needed. A configurable cell-count ceiling limits growth.
 
 For an existing frozen index and its original vectors:
 

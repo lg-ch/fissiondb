@@ -89,6 +89,8 @@ int anchor_index_enable_fission(AnchorIndex*idx,uint32_t cap,uint32_t maximum){
     return anchor_live_enable_fission(idx->live,cap,maximum,&ops,idx);
 }
 int anchor_index_fission_stats(AnchorIndex*idx,uint64_t values[8],double timings[3]){return idx?anchor_live_fission_stats(idx->live,values,timings):-1;}
+int anchor_index_fission_flush(AnchorIndex*idx){return idx?anchor_live_fission_flush(idx->live):-1;}
+int anchor_index_fission_progress(AnchorIndex*idx,uint64_t values[8],double timings[3]){return idx?anchor_live_fission_progress(idx->live,values,timings):-1;}
 int anchor_index_pack_live(AnchorIndex* idx) {
     if(!idx||idx->residual_fd<0||!idx->live)return -1;
     if(anchor_live_has_fission(idx->live))return anchor_live_fission_checkpoint(idx->live);

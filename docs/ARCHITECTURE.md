@@ -82,10 +82,35 @@ the residual codes relative to those representatives. It does not run global
 training or compute ground truth. At the configured representative ceiling,
 insertions continue and cells may grow beyond the capacity target.
 
-The shared live read/write lock covers publication and queries. A split holds
-the write lock, so queries wait and cannot observe a half-rewritten cell.
-Checkpointing and compaction also hold this lock. Separate query contexts allow
-concurrent readers; this version does not provide lock-free splitting.
+One native worker prepares a split outside the live write lock. The parent stays
+published while the worker reads its vectors, computes child representatives and
+writes new codes into reserved, unpublished chunks. Concurrent insertions and
+updates append to the parent and remain searchable immediately after commit.
+The worker collects and encodes this delta before publication. Deletes and
+overrides are checked against the current journal state during retrieval.
+
+Once the worker has caught up, a short write lock swaps the cell descriptors and
+representatives. Acquiring that lock waits out readers of the previous version;
+old chunks remain intact until a later durable checkpoint. A query therefore
+sees a consistent topology. Preparation overlaps queries and ingestion; this is
+not a lock-free engine. Journal commits, chunk reservation, publication,
+checkpointing and compaction still need synchronized sections.
+
+Only one cell is prepared at a time. A parent exceeding capacity plus 256
+assignments pauses subsequent vector writes until the worker makes progress;
+an already-running batch can add at most 256 more. Waiting writers release the
+live lock so searches can continue. The bounded delta lives in the published
+parent's disk records. Scratch buffers cover at most capacity plus 512 records,
+and the worker has a 1 MiB stack. Growing the representative arrays can still
+temporarily hold both old and new allocations; the large center copy happens
+outside the live lock. No complete vector corpus is duplicated for a split.
+
+`flush_fission()` waits for queued splits with readers still active. Stop or
+quiesce ingestion when a completely drained topology is required. Closing the
+collection drains the worker before its final checkpoint. Recovery from the
+journal remains valid if the process dies with unpublished daughters on disk.
+Checkpointing and compaction serialize with the worker before acquiring the live
+write lock; they remain blocking maintenance operations.
 
 Existing frozen files remain immutable. Enabling fission indexes live insertions
 and vector overrides independently and merges their results with frozen results.

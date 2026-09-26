@@ -17,6 +17,8 @@ int anchor_live_enable_fission(AnchorLive*,uint32_t,uint32_t,const AnchorFission
 int anchor_live_fission_config(AnchorLive*,uint32_t*,uint32_t*);
 int anchor_live_fission_stats(AnchorLive*,uint64_t values[8],double timings[3]);
 int anchor_live_fission_checkpoint(AnchorLive*);
+int anchor_live_fission_flush(AnchorLive*);
+int anchor_live_fission_progress(AnchorLive*,uint64_t values[8],double timings[3]);
 int anchor_live_search_fission(const AnchorLive*,int,const float*,const roaring_bitmap_t*,uint32_t*,float*,int,int,uint64_t*,uint64_t*,AnchorFissionScore,void*);
 int anchor_live_has_fission(const AnchorLive*);
 int anchor_live_pack(AnchorLive*,AnchorLiveEncode,void*);

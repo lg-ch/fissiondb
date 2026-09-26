@@ -27,11 +27,16 @@ uint64_t anchor_index_bytes(const AnchorIndex* index);
 /* Enable a local durable overlay before creating contexts. One open writer
    handle per live directory; multiple query contexts share its read lock. */
 int anchor_index_enable_live(AnchorIndex* index, const char* live_dir);
-/* Enable automatic splitting of live cells before query contexts are created.
+/* Enable background splitting of live cells before query contexts are created.
    Frozen snapshots remain immutable; live cells route independently. Existing
    persisted configuration is loaded automatically with the live journal. */
 int anchor_index_enable_fission(AnchorIndex*,uint32_t cell_capacity,uint32_t max_cells);
 int anchor_index_fission_stats(AnchorIndex*,uint64_t values[8],double timings[3]);
+/* Wait for queued splits; readers continue. Quiesce ingestion to drain fully. */
+int anchor_index_fission_flush(AnchorIndex*);
+/* Pending, preparing, concurrent queries, delta records, writer waits,
+   active/peak scratch bytes, publications; publication total/max/last ms. */
+int anchor_index_fission_progress(AnchorIndex*,uint64_t values[8],double timings[3]);
 /* Allocated IDs, including tombstones; zero is valid. UINT64_MAX on error. */
 uint64_t anchor_index_count(AnchorIndex* index);
 int anchor_index_insert(AnchorIndex* index, const float* vector,
