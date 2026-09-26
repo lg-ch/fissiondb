@@ -17,7 +17,7 @@ typedef struct LiveFission {
     FissionChunk* chunks;
     int8_t* centers;
     float* scales;
-    int fd;
+    int fd,direct_fd;
     uint64_t checkpoint_end,splits,rewritten,records;
     double split_ms,split_max_ms,last_split_ms;
     uint32_t* queue_next;
@@ -237,11 +237,12 @@ int anchor_live_fission_config(AnchorLive*l,uint32_t*cap,uint32_t*maximum){
 }
 int anchor_live_enable_fission(AnchorLive*l,uint32_t cap,uint32_t maximum,const AnchorFissionOps*ops,void*user){
     if(!l||l->fission||l->dim>1024||cap<64||cap>65536||maximum<2||maximum>1000000||!ops||!ops->dot||!ops->encode||!ops->sketch)return -1;
-    LiveFission*f=calloc(1,sizeof(*f));if(!f)return -1;f->fd=-1;f->free_head=FISSION_NONE;f->ops=*ops;f->user=user;f->cap=cap;f->maximum=maximum;
+    LiveFission*f=calloc(1,sizeof(*f));if(!f)return -1;f->fd=f->direct_fd=-1;f->free_head=FISSION_NONE;f->ops=*ops;f->user=user;f->cap=cap;f->maximum=maximum;
     f->queue_head=f->queue_tail=f->active=FISSION_NONE;
     pthread_mutex_init(&f->work_mutex,NULL);pthread_mutex_init(&f->job_mutex,NULL);pthread_cond_init(&f->work_cond,NULL);
     pthread_rwlock_wrlock(&l->lock);int rc=-1;if(l->poisoned)goto done;l->fission=f;
     f->fd=openat(l->dir_fd,"fission.codes",O_RDWR|O_CREAT|O_NOFOLLOW,0600);if(f->fd<0)goto done;
+    f->direct_fd=openat(l->dir_fd,"fission.codes",O_RDONLY|O_DIRECT|O_NOFOLLOW);
     uint32_t saved_cap=0,saved_max=0;int config=anchor_live_fission_config(l,&saved_cap,&saved_max);
     if(config<0||(config&&(saved_cap!=cap||saved_max!=maximum)))goto done;
     if(fission_load(l)){if(live_fission_rebuild(l))goto done;}
@@ -254,7 +255,7 @@ int anchor_live_enable_fission(AnchorLive*l,uint32_t cap,uint32_t maximum,const 
     if(fission_worker_start(l))goto done;
     rc=0;
 done:
-    if(rc){l->fission=NULL;if(f->fd>=0)close(f->fd);free(f->cells);free(f->chunks);free(f->centers);free(f->scales);free(f->queue_next);free(f->queued);pthread_cond_destroy(&f->work_cond);pthread_mutex_destroy(&f->work_mutex);pthread_mutex_destroy(&f->job_mutex);free(f);}
+    if(rc){l->fission=NULL;if(f->fd>=0)close(f->fd);if(f->direct_fd>=0)close(f->direct_fd);free(f->cells);free(f->chunks);free(f->centers);free(f->scales);free(f->queue_next);free(f->queued);pthread_cond_destroy(&f->work_cond);pthread_mutex_destroy(&f->work_mutex);pthread_mutex_destroy(&f->job_mutex);free(f);}
     pthread_rwlock_unlock(&l->lock);return rc;
 }
 static void live_fission_close(AnchorLive*l){
@@ -262,6 +263,7 @@ static void live_fission_close(AnchorLive*l){
     fission_worker_stop(l);
     if(!l->poisoned)fission_checkpoint_locked(l);
     if(f->fd>=0)close(f->fd);
+    if(f->direct_fd>=0)close(f->direct_fd);
     free(f->cells);free(f->chunks);free(f->centers);free(f->scales);free(f->queue_next);free(f->queued);
     pthread_cond_destroy(&f->work_cond);pthread_mutex_destroy(&f->work_mutex);pthread_mutex_destroy(&f->job_mutex);free(f);l->fission=NULL;
 }
@@ -275,40 +277,6 @@ int anchor_live_fission_stats(AnchorLive*l,uint64_t v[8],double t[3]){
     uint64_t a[]={f->K,f->splits,f->rewritten,f->records,largest,(uint64_t)f->cell_capacity*(l->dim+sizeof(FissionCell)+9)+(uint64_t)f->chunk_capacity*sizeof(FissionChunk)+sizeof(*f),(uint64_t)f->J*FISSION_CHUNK*FISSION_ENTRY,f->maximum};
     memcpy(v,a,sizeof(a));t[0]=f->split_ms;t[1]=f->split_max_ms;t[2]=f->last_split_ms;anchor_live_read_unlock(l);return 0;
 }
-int anchor_live_search_fission(const AnchorLive*l,int probes,const float*q,const roaring_bitmap_t*allowed,uint32_t*ids,float*scores,int count,int capacity,uint64_t*entries,uint64_t*bytes,AnchorFissionScore score_code,void*user){
-    const LiveFission*f=l->fission;if(!f)return -1;if(!f->K)return count;if(probes>(int)f->K)probes=f->K;
-    PackHit*routes=malloc((size_t)probes*sizeof(*routes)),*hits=malloc((size_t)capacity*2*sizeof(*hits));
-    uint8_t*buffer=malloc(FISSION_CHUNK*FISSION_ENTRY);float*vector=malloc((size_t)l->dim*4);uint32_t*seen=malloc((size_t)capacity*4);
-    int rc=-1,rn=0,hn=0;if(!routes||!hits||!buffer||!vector||!seen)goto done;
-    int8_t q8[1024];float mx=0;for(int d=0;d<l->dim;d++)mx=fmaxf(mx,fabsf(q[d]));for(int d=0;d<l->dim;d++)q8[d]=(int8_t)lrintf(q[d]*127/fmaxf(mx,1e-30f));
-    for(uint32_t k=0;k<f->K;k++)if(f->cells[k].count)pack_offer(routes,&rn,probes,(PackHit){f->ops.dot(q8,f->centers+(size_t)k*l->dim,l->dim)*f->scales[k],k,0});
-    qsort(routes,rn,sizeof(*routes),pack_hit_cmp);
-    for(int i=0;i<rn;i++){uint32_t cell=routes[i].id;
-        for(uint32_t b=f->cells[cell].head;b!=FISSION_NONE;b=f->chunks[b].next){
-            uint32_t m=f->chunks[b].used;size_t size=(size_t)m*FISSION_ENTRY;
-            if(read_all(f->fd,buffer,size,(uint64_t)b*FISSION_CHUNK*FISSION_ENTRY))goto done;
-            *bytes+=size;*entries+=m;
-            for(uint32_t j=0;j<m;j++){uint8_t*p=buffer+(size_t)j*FISSION_ENTRY;uint32_t id,crc;uint64_t offset;
-                memcpy(&id,p,4);memcpy(&offset,p+4,8);memcpy(&crc,p+80,4);if(XXH32(p,80,cell)!=crc)goto done;
-                if(!fission_current(l,id,offset)||(allowed&&!roaring_bitmap_contains(allowed,id)))continue;
-                float s=score_code(user,f->centers+(size_t)cell*l->dim,p+12);if(!isfinite(s))goto done;
-                pack_offer(hits,&hn,2*capacity,(PackHit){s,id,offset});
-            }
-        }
-    }
-    qsort(hits,hn,sizeof(*hits),pack_hit_cmp);int ns=0;
-    for(int i=0;i<hn&&ns<capacity;i++){
-        int dup=0;for(int j=0;j<ns;j++)if(seen[j]==hits[i].id){dup=1;break;}if(dup)continue;seen[ns++]=hits[i].id;
-        for(int j=0;j<count;j++)if(ids[j]==hits[i].id){dup=1;break;}
-        if(dup)continue;
-        if(read_all(l->log_fd,vector,(size_t)l->dim*4,hits[i].offset+sizeof(LiveRecord)))goto done;
-        *bytes+=(uint64_t)l->dim*4;float score=0;for(int d=0;d<l->dim;d++)score+=q[d]*vector[d];
-        if(count<capacity||score>scores[count-1]){int j=count<capacity?count++:capacity-1;
-            while(j>0&&score>scores[j-1]){scores[j]=scores[j-1];ids[j]=ids[j-1];j--;}scores[j]=score;ids[j]=hits[i].id;}
-    }
-    if(f->active!=FISSION_NONE)__atomic_add_fetch((uint64_t*)&f->queries_during_prepare,1,__ATOMIC_RELAXED);
-    rc=count;
-done:free(routes);free(hits);free(buffer);free(vector);free(seen);return rc;
-}
+#include "anchor_live_fission_io.inc"
 
 #include "anchor_live_fission_async.inc"

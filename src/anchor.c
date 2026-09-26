@@ -1151,6 +1151,8 @@ struct AnchorQuery {
     uint8_t *res_buffer[2];
     size_t res_capacity;
     int res_width, res_overlap, res_direct;
+    AnchorLiveIO live_io;
+    double live_lock_wait_ms;
     uint64_t *boff, *blen, *read_off, *read_len;
     uint8_t** read_dst;
 };
@@ -1188,6 +1190,14 @@ int anchor_query_unique(AnchorQuery* c,int enable) {
 int anchor_query_unique_stats(AnchorQuery* c,uint64_t out[2]) {
     if(!c||c->failed||!out||!c->trace_unique)return -1;
     out[0]=c->trace_entries;out[1]=roaring_bitmap_get_cardinality(c->trace_unique);return 0;
+}
+int anchor_query_live_stats(AnchorQuery*c,uint64_t out[8],double timings[5]){
+    if(!c||!out||!timings)return -1;
+    AnchorLiveIO*io=&c->live_io;
+    uint64_t values[]={io->reads,io->code_reads,io->rerank_reads,io->submits,io->overlaps,
+                       io->max_pending,io->direct_reads,io->capacity*(io->overlap?2:1)};
+    double times[]={c->live_lock_wait_ms,io->route_ms,io->io_ms,io->score_ms,io->rerank_ms};
+    memcpy(out,values,sizeof(values));memcpy(timings,times,sizeof(times));return 0;
 }
 void anchor_index_close(AnchorIndex* idx) {
     if (!idx) return;
@@ -2004,11 +2014,13 @@ int anchor_query_search_filtered(AnchorQuery* ctx,const float* vector,int top_k,
     }
     AnchorStats local;if(!stats)stats=&local;memset(stats,0,sizeof(*stats));
     double call_start=now_ms();
+    memset(&ctx->live_io,0,sizeof(ctx->live_io));ctx->live_lock_wait_ms=0;
     ctx->trace_routed=0;ctx->trace_candidates=0;
     ctx->trace_entries=0;if(ctx->trace_unique)roaring_bitmap_clear(ctx->trace_unique);
     ctx->policy_start=call_start;ctx->policy_used=0;ctx->policy_limited=0;ctx->policy_observed_gap=0;
     AnchorLive* live=ctx->index->live;
     if(anchor_live_read_lock(live))return -1;
+    ctx->live_lock_wait_ms=now_ms()-call_start;
     roaring_bitmap_t* filter=NULL;
     int rc=-1;
     if(nallowed>=0) {filter=nallowed?roaring_bitmap_of_ptr((size_t)nallowed,allowed_ids):roaring_bitmap_create();if(!filter)goto done;}

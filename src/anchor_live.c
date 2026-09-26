@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #include "anchor_live.h"
 #include <errno.h>
@@ -13,6 +14,7 @@
 #include <unistd.h>
 #include <xxhash.h>
 #include <time.h>
+#include <liburing.h>
 
 #define LIVE_MAGIC UINT64_C(0x314C564152474E4D)
 #define RECORD_MAGIC 0x31524c41u

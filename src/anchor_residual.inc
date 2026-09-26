@@ -167,7 +167,10 @@ static int anchor_residual_search(AnchorQuery* c,const float* q,int top_k,uint32
         ResidualLiveScore state={c,UINT32_MAX,0,0,0};
         if(anchor_live_has_fission(idx->live)){
             ResidualFissionScore dynamic={{c,0,0,0,0},NULL};
-            nf=anchor_live_search_fission(idx->live,c->nprobe,c->qn,c->allowed,c->merge_ids,c->merge_scores,nf,c->rerank,&st->entries,&st->bytes,residual_score_fission,&dynamic);
+            c->live_io=(AnchorLiveIO){.ring=&c->ring,.ring_ok=&c->ring_ok,
+                .buffer={c->res_buffer[0],c->res_buffer[1]},.capacity=c->res_capacity,
+                .width=c->res_width,.overlap=c->res_overlap,.direct=c->res_direct};
+            nf=anchor_live_search_fission(idx->live,c->nprobe,c->qn,c->allowed,c->merge_ids,c->merge_scores,nf,c->rerank,&st->entries,&st->bytes,residual_score_fission,&dynamic,&c->live_io);
         }else nf=anchor_live_search_packed(idx->live,cells,probes,c->qn,c->allowed,c->merge_ids,c->merge_scores,nf,c->rerank,&st->entries,&st->bytes,residual_score_live,&state);
         if(nf<0)return -1;
         for(int i=0;i<nf;i++)c->fin_all[i]=(ScId){c->merge_scores[i],c->merge_ids[i]};

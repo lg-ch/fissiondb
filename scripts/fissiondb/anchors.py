@@ -65,6 +65,7 @@ for name, args, result in (
     ('anchor_query_trace_stats', [C.c_void_p,C.POINTER(C.c_uint64)], C.c_int),
     ('anchor_query_unique', [C.c_void_p,C.c_int], C.c_int),
     ('anchor_query_unique_stats', [C.c_void_p,C.POINTER(C.c_uint64)], C.c_int),
+    ('anchor_query_live_stats', [C.c_void_p,C.POINTER(C.c_uint64),C.POINTER(C.c_double)], C.c_int),
     ('anchor_index_snapshot_live', [C.c_void_p, C.c_char_p], C.c_int),
     ('anchor_index_pack_live', [C.c_void_p], C.c_int),
     ('anchor_index_unpacked_bytes', [C.c_void_p], C.c_uint64),
@@ -654,6 +655,12 @@ class AnchorQuery:
             result_stats={name: getattr(stats, name) for name, _ in stats._fields_}
             result_stats.update(probes=int(policy[0]),budget_limited=bool(policy[1]),anchor_gap=float(policy[2]),
                                 deadline_exceeded=bool(self.latency_budget_ms and stats.total_ms>self.latency_budget_ms))
+            if self.index.fission:
+                counters=(C.c_uint64*8)();timings=(C.c_double*5)()
+                if _lib.anchor_query_live_stats(self._handle,counters,timings):raise OSError('Live IO counters unavailable')
+                result_stats['live']=dict(zip(('reads','code_reads','rerank_reads','submits','overlap_batches',
+                    'max_pending','direct_reads','buffer_bytes'),map(int,counters)))
+                result_stats['live'].update(zip(('lock_wait_ms','route_ms','io_ms','score_ms','rerank_ms'),map(float,timings)))
             if diagnostic_ids is not None:
                 trace=(C.c_uint64*3)()
                 if _lib.anchor_query_trace_stats(self._handle,trace):raise OSError('Diagnostic counters unavailable')

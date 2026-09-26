@@ -89,6 +89,10 @@ int anchor_query_trace_stats(AnchorQuery*,uint64_t out[3]);
    bitmap memory/CPU are diagnostic costs; traced timings include this work. */
 int anchor_query_unique(AnchorQuery*,int enable);
 int anchor_query_unique_stats(AnchorQuery*,uint64_t out[2]);
+/* Live reads/code reads/rerank reads/submissions/overlaps/max pending/direct
+   reads/buffer bytes; timings: lock wait/routing/IO wait+submit/scoring/rerank.
+   IO includes rerank waits, so these timings are not additive. */
+int anchor_query_live_stats(AnchorQuery*,uint64_t out[8],double timings[5]);
 /* Returns result count, -1 on invalid input/IO, -2 on memory limit.
    On failure outputs are invalid and the context must be closed. */
 int anchor_query_search(AnchorQuery* query, const float* vector, int top_k,
