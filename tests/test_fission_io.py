@@ -14,7 +14,8 @@ def test_live_batched_reads_match_serial_with_tail_chunks(tmp_path,dim):
         index.flush_fission()
         with index.context(nprobe=1536,rerank=400) as query:
             default=query.search(x[6060])[2]['live']
-            assert default['direct_reads']==0
+            assert default['code_reads']>0
+            assert default['direct_reads']==default['code_reads']
             assert default['max_pending']>1 and default['submits']<default['reads']
             if default['code_reads']>64:assert default['overlap_batches']>0
             for where in (None,{'group':'yes'}):

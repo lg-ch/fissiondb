@@ -1,0 +1,118 @@
+{
+  "protocol": {
+    "rows": 65536,
+    "dim": 768,
+    "queries": 64,
+    "nprobe": 1536,
+    "rerank": 400,
+    "cell_capacity": 2048,
+    "batch": 256,
+    "ingest_cpu": 0,
+    "search_cpu": 1,
+    "source": "/root/fission-contiguous-ci-fixture/base.f16bin",
+    "query_file": "/root/fission-contiguous-ci-fixture/queries.npy",
+    "truth_file": "/root/fission-contiguous-ci-fixture/truth.npz",
+    "cache": "Engine defaults, no eviction; fresh collection, concurrent then quiescent queries.",
+    "query_sha256": "942021c1658224a0414b5aa90f14c68069dd0a749526c9d0d4f9e0b4b0be2201",
+    "truth_sha256": "53db8ed89d3c9c59a5abfaf6f7c376df57aa14a990401e8251d2d22adbb12f2d",
+    "source_size": 100663304,
+    "source_mtime_ns": 1790517287585089173,
+    "limits": {
+      "memory.max": "1999998976",
+      "memory.swap.max": "0"
+    },
+    "metadata": "none",
+    "rebuild": true,
+    "source_prefix_sha256": "75f27a5aa712e4e566f66049503e4f9d75ce5b2cf3d4e97e59d93d0dc1e7cf5a"
+  },
+  "ingestion_seconds": 6.626025588717312,
+  "tail_ingestion_seconds": 2.179941396228969,
+  "recall_at_10": 1.0,
+  "quiescent": {
+    "n": 64,
+    "p50_ms": 10.181587422266603,
+    "p95_ms": 10.48835483379662,
+    "p99_ms": 11.38917237054556,
+    "max_ms": 12.893245089799166
+  },
+  "concurrent": {
+    "n": 200,
+    "p50_ms": 9.794314159080386,
+    "p95_ms": 11.097718053497369,
+    "p99_ms": 12.9384454106912,
+    "max_ms": 14.364289585500956
+  },
+  "state": {
+    "allocated_count": 65536,
+    "deleted_count": 0,
+    "maintenance_bytes": 0,
+    "journal_bytes": 273678400,
+    "idempotency_records": 0,
+    "active_count": 65536,
+    "fission": {
+      "cells": 91,
+      "splits": 89,
+      "rewritten": 198579,
+      "records": 65536,
+      "largest_cell": 2040,
+      "owned_bytes": 150776,
+      "arena_bytes": 61845504,
+      "max_cells": 300000,
+      "split_total_ms": 4275.369282722473,
+      "split_max_ms": 82.33611106872559,
+      "last_split_ms": 33.91462993621826,
+      "pending_cells": 0,
+      "preparing": 0,
+      "queries_during_prepare": 137,
+      "delta_records": 2323,
+      "backpressure_waits": 40,
+      "scratch_bytes": 0,
+      "peak_scratch_bytes": 11811644,
+      "publishes": 89,
+      "publish_total_ms": 0.09100532531738281,
+      "publish_max_ms": 0.008975982666015625,
+      "last_publish_ms": 0.0003681182861328125
+    }
+  },
+  "resources": {
+    "memory.peak": "667377664",
+    "memory.max": "1999998976",
+    "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "0"
+  },
+  "provenance": {
+    "machine": "aarch64",
+    "kernel": "6.17.0-1014-nvidia",
+    "native_sha256": "330f0a5d5ddcc2813dbd563d8cfcece2d2a4f9af6ccb3d2b49b66112220e1235",
+    "benchmark_sha256": "f2fd6978d0004a7d56885b546635c3a6f7247d62fc84cdc82a39561cef379d62"
+  },
+  "cell_io": {
+    "expected_reads": 91,
+    "min_reads": 91,
+    "max_reads": 91,
+    "mean_reads": 91.0,
+    "one_read_per_cell": true
+  },
+  "direct_io": {
+    "quiescent": {
+      "code_reads": 5824,
+      "direct_reads": 5824,
+      "all_direct": true
+    },
+    "concurrent": {
+      "code_reads": 14278,
+      "direct_reads": 14278,
+      "all_direct": true
+    }
+  },
+  "regression_gate": {
+    "passed": true,
+    "failures": [],
+    "baseline": "/root/fission-contiguous-ci-baseline/report.json",
+    "require_contiguous": true,
+    "require_direct": true,
+    "max_p50_ratio": 1.1,
+    "max_p95_ratio": 1.2,
+    "max_recall_drop": 0.005
+  }
+}

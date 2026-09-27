@@ -45,6 +45,12 @@ ingestion or HTTP/network overhead. The query panel was reused during developmen
 
 [Protocol, evidence and scope](docs/BENCHMARKS.md)
 
+On a separately rebuilt **10M-vector, 768d adaptive live index**, retrieval after
+ingestion measured **77.20 ms median, 95.38 ms p95 and 97.15% recall@10** on one
+GB10 core, with a 2 GB total-memory cap. Contiguous live cells use direct IO by
+default. [Protocol and buffered/direct comparison](docs/validation/contiguous-direct-20260927.md)
+include cache conditions, exact result checks and current live storage overhead.
+
 ## Build and run
 
 Linux, Python 3.10+, GCC, OpenMP, liburing, CRoaring, xxHash and libcurl are required.

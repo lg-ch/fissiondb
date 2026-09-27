@@ -227,7 +227,7 @@ PYTHONPATH=scripts python tests/bench_live_regression.py \
   --source /data/base.f16bin --queries /data/queries.npy \
   --truth /data/gt-1000000.npz --rows 1000000 \
   --ingest-cpu 0 --search-cpu 1 --output /results/candidate \
-  --baseline /results/baseline/report.json --require-contiguous
+  --baseline /results/baseline/report.json --require-contiguous --require-direct
 ```
 
 The default gate fails if mean recall@10 drops by more than 0.005, median latency
@@ -248,8 +248,12 @@ real-corpus measurements should use the stricter defaults above. Regular CI
 runs the deterministic IO scheduling and publication correctness checks.
 
 The candidate CI run additionally requires exactly one code read per selected
-nonempty cell in the quiescent pass. It fails independently of recall or timing
-noise. Layout tests cross 512/1024/2048-entry boundaries, exercise fission and
+nonempty cell in the quiescent pass, and verifies that all live code reads use
+direct IO in both passes. These gates fail independently of recall or timing
+noise, including if direct IO silently falls back to buffered reads. The default
+IO policy is also checked at dimensions 128, 768 and 1024. Direct IO is the live
+code default; `query.residual_io(direct=False)` remains available for workloads
+that benefit from a resident page cache. Layout tests cross 512/1024/2048-entry boundaries, exercise fission and
 cell-count ceilings, and verify the invariant again after checkpoint/reopen.
 Legacy migration tests compare every encoded byte and representative and kill
 the opener before arena replacement, after replacement and after checkpoint

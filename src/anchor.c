@@ -1428,9 +1428,9 @@ AnchorQuery* anchor_query_create(const AnchorIndex* idx, int np, int rr, int thr
     if (!ctx) return NULL;
     ctx->index = idx; ctx->nprobe = np; ctx->rerank = rr; ctx->threads = threads;
     ctx->res_width=64;ctx->res_overlap=1;ctx->res_direct=idx->residual_direct_fd>=0;
-    /* Mutable chunks retain buffered reads by default. Direct IO remains an
-     * explicit query option; the contiguous frozen reader keeps its default. */
-    ctx->res_live_direct=0;
+    /* Keep contiguous live code reads off the page cache by default, like
+     * frozen cells. The live reader falls back if its direct fd is unavailable. */
+    ctx->res_live_direct=1;
     ctx->ph_stride = rr*4 > 16384 ? (size_t)rr*4 : 16384;
     uint64_t owned = idx->bytes + sizeof(*ctx);
     int dim = idx->meta.dim, reads = np > rr ? np : rr;

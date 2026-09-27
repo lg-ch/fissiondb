@@ -1,0 +1,59 @@
+{
+  "phase": "complete",
+  "results": {
+    "buffered": {
+      "queries": 1024,
+      "p50_ms": 153.44092110171914,
+      "p95_ms": 165.6127318041399,
+      "recall_at_10": 0.971484375,
+      "mean_live": {
+        "reads": 1936.0,
+        "code_reads": 1536.0,
+        "rerank_reads": 400.0,
+        "submits": 31.869140625,
+        "overlap_batches": 23.869140625,
+        "max_pending": 64.0,
+        "direct_reads": 0.0,
+        "buffer_bytes": 16777216.0,
+        "lock_wait_ms": 0.0002285628579556942,
+        "route_ms": 0.6974766780622303,
+        "io_ms": 85.76427795691416,
+        "score_ms": 67.55241062166169,
+        "rerank_ms": 4.733603354077786
+      }
+    },
+    "direct": {
+      "queries": 1024,
+      "p50_ms": 77.20482349395752,
+      "p95_ms": 95.38384433835743,
+      "recall_at_10": 0.971484375,
+      "mean_live": {
+        "reads": 1936.0,
+        "code_reads": 1536.0,
+        "rerank_reads": 400.0,
+        "submits": 31.869140625,
+        "overlap_batches": 23.869140625,
+        "max_pending": 64.0,
+        "direct_reads": 1536.0,
+        "buffer_bytes": 16777216.0,
+        "lock_wait_ms": 0.00032572541385889053,
+        "route_ms": 0.7091481913812459,
+        "io_ms": 15.687662296462804,
+        "score_ms": 61.992686768993735,
+        "rerank_ms": 4.477090253029019
+      }
+    }
+  },
+  "identical_ids_scores_entries": true,
+  "open_seconds": 109.19606175320223,
+  "library_sha256": "a529150fb0f04032ef026e4d86242bd69ff98adcf0aa703e97b7b7aa041d87b7",
+  "resources": {
+    "memory.max": "1999998976",
+    "memory.peak": "1999998976",
+    "memory.events": "low 0\nhigh 0\nmax 227518\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "0",
+    "io.stat": "259:0 rbytes=503302266880 wbytes=40220913664 rios=11245007 wios=329130 dbytes=0 dios=0"
+  },
+  "protocol": "10M same contiguous index; CPU5,2GB no swap,1536/400,64 overlapping reads;512 real queries twice in shuffled order,balanced buffered/direct order for each query;fadvise before every query;device cache not flushed;exact IDs/scores/entries checked against buffered ABBA reference.",
+  "median_speedup": 1.9874525211980867
+}

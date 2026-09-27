@@ -26,13 +26,18 @@ request per selected cell, with direct reads aligned to 4 KiB. It overlaps the
 next batch of up to 64 cells with scoring the current batch. Device or filesystem
 layers may split a logical request into multiple physical operations.
 
-Adaptive live cells use linked chunks of 512 records. Their reader reuses the
-query's aligned buffers and io_uring queue: up to 64 chunk reads per batch, with
-the next batch in flight during scoring. Adaptive chunks use buffered reads by
-default; direct IO is available explicitly. Direct reads include boundary pages;
-only published used records are scored and checksum-validated. Live reranking
-also batches journal reads. `residual_io()` configures both frozen and adaptive
-live reads. Frozen and live cells are routed independently.
+Adaptive live cells occupy contiguous slots, allocated in powers of two of
+512-record chunks. Used records form a dense prefix. The reader issues one code
+request per ordinary cell; cells exceeding the bounded buffer are read in pieces.
+It reuses the query's aligned buffers and io_uring queue, with up to 64 reads per
+batch and the next batch in flight during scoring. Live codes use direct IO by
+default when the filesystem supports opening a direct descriptor. Explicit
+`residual_io(direct=False)` selects buffered IO; an unavailable direct descriptor
+also falls back to buffered reads. Actual mode is visible in `live.direct_reads`.
+Direct reads include boundary pages; only published used records are scored and
+checksum-validated. Live reranking also batches buffered journal reads.
+`residual_io()` configures both frozen and adaptive live code reads. Frozen and
+live cells are routed independently.
 
 Candidate IDs are deduplicated before exact reranking. The default rerank budget
 is 400 per source. Exact scoring uses stored float16 originals for frozen vectors

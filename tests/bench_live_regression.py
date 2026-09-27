@@ -29,6 +29,7 @@ p.add_argument('--max-p50-ratio',type=float,default=1.10)
 p.add_argument('--max-p95-ratio',type=float,default=1.20)
 p.add_argument('--max-recall-drop',type=float,default=.005)
 p.add_argument('--require-contiguous',action='store_true',help='Fail if quiescent code reads exceed one per selected cell')
+p.add_argument('--require-direct',action='store_true',help='Fail if any live code reads use buffered IO')
 args=p.parse_args();out=Path(args.output);out.mkdir(parents=True,exist_ok=False)
 os.sched_setaffinity(0,{args.ingest_cpu})
 queries=np.load(args.queries)[:args.query_count].astype(np.float32)
@@ -102,6 +103,12 @@ expected_reads=min(protocol['nprobe'],state['fission']['cells'])
 report['cell_io']=dict(expected_reads=expected_reads,min_reads=min(code_reads),max_reads=max(code_reads),
                      mean_reads=float(np.mean(code_reads)),one_read_per_cell=all(n==expected_reads for n in code_reads))
 if args.require_contiguous and not report['cell_io']['one_read_per_cell']:failures.append('contiguous_cell_reads')
+report['direct_io']={}
+for mode,items in (('quiescent',rows),('concurrent',measurements)):
+    codes=sum(r['stats']['live']['code_reads'] for r in items)
+    direct=sum(r['stats']['live']['direct_reads'] for r in items)
+    report['direct_io'][mode]=dict(code_reads=codes,direct_reads=direct,all_direct=codes>0 and codes==direct)
+    if args.require_direct and not report['direct_io'][mode]['all_direct']:failures.append(mode+'_direct_reads')
 if args.baseline:
     baseline=json.loads(Path(args.baseline).read_text());assert baseline['protocol']==protocol,'Different benchmark protocol'
     if recall<baseline['recall_at_10']-args.max_recall_drop:failures.append('recall')
@@ -109,7 +116,7 @@ if args.baseline:
         for percentile,limit in [('p50_ms',args.max_p50_ratio),('p95_ms',args.max_p95_ratio)]:
             if report[mode].get(percentile,float('inf'))>baseline[mode][percentile]*limit:failures.append(mode+'_'+percentile)
 report['regression_gate']=dict(passed=not failures,failures=failures,baseline=args.baseline,
-    require_contiguous=args.require_contiguous,max_p50_ratio=args.max_p50_ratio,
+    require_contiguous=args.require_contiguous,require_direct=args.require_direct,max_p50_ratio=args.max_p50_ratio,
     max_p95_ratio=args.max_p95_ratio,max_recall_drop=args.max_recall_drop)
 (out/'report.json').write_text(json.dumps(report,indent=2))
 (out/'queries.json').write_text(json.dumps(rows))

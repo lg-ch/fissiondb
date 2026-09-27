@@ -1,5 +1,9 @@
 # Live reader and insertion regression checks
 
+Historical results for the September 26 implementation. The live layout and
+default IO policy below were superseded by [contiguous cells and direct IO](contiguous-direct-20260927.md)
+after the 10M-vector comparison on September 27.
+
 The native adaptive reader now batches up to 64 chunk reads, overlaps the next
 batch with scoring, and batches exact rerank reads. It reuses each query's two
 bounded buffers. Mutable chunks keep buffered IO by default; direct IO remains
