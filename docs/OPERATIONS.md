@@ -180,6 +180,14 @@ published measurements use the explicit decimal-byte cap shown in their report.
 
 ## Validation
 
+For bulk loading, set `FISSIONDB_INGEST_THREADS` before opening the collection
+(default 1, valid range 1–256). It parallelizes routing and residual encoding
+within insertion batches; journal commits and the split worker remain serialized.
+For example, `FISSIONDB_INGEST_THREADS=20 OMP_WAIT_POLICY=PASSIVE python ingest.py`
+uses up to 20 ingestion threads. The process must have affinity to the intended
+CPUs. This does not increase the number of search threads. Measure actual CPU use
+and throughput: IO, fsync and split backpressure can limit scaling.
+
 ```sh
 make test
 python -m build
@@ -219,7 +227,7 @@ PYTHONPATH=scripts python tests/bench_live_regression.py \
   --source /data/base.f16bin --queries /data/queries.npy \
   --truth /data/gt-1000000.npz --rows 1000000 \
   --ingest-cpu 0 --search-cpu 1 --output /results/candidate \
-  --baseline /results/baseline/report.json
+  --baseline /results/baseline/report.json --require-contiguous
 ```
 
 The default gate fails if mean recall@10 drops by more than 0.005, median latency
@@ -238,6 +246,14 @@ queries and exhaustive FP64 GT. It enforces the same 2 GB cgroup for both runs.
 Its 25% median / 50% p95 tolerance accounts for shared-runner noise; dedicated
 real-corpus measurements should use the stricter defaults above. Regular CI
 runs the deterministic IO scheduling and publication correctness checks.
+
+The candidate CI run additionally requires exactly one code read per selected
+nonempty cell in the quiescent pass. It fails independently of recall or timing
+noise. Layout tests cross 512/1024/2048-entry boundaries, exercise fission and
+cell-count ceilings, and verify the invariant again after checkpoint/reopen.
+Legacy migration tests compare every encoded byte and representative and kill
+the opener before arena replacement, after replacement and after checkpoint
+publication. A separate recovery test retains an uncheckpointed journal tail.
 
 For adaptive queries, `stats['live']` reports the direct lock-wait timer, routing,
 IO submit/wait, code scoring and reranking, plus read/submission/overlap counts.

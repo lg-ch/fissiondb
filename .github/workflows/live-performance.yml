@@ -40,7 +40,7 @@ jobs:
           for revision in baseline candidate; do
             extra=()
             if [ "$revision" = candidate ]; then
-              extra=(--baseline "$PWD/results/baseline/report.json")
+              extra=(--baseline "$PWD/results/baseline/report.json" --require-contiguous)
             fi
             sudo systemd-run --wait --pipe --collect --unit="live-regression-$revision" \
               --property=MemoryMax=2000000000 --property=MemorySwapMax=0 \

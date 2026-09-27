@@ -16,7 +16,7 @@ arrives, without an offline training set.
 ## Current architecture
 
 1. Score the in-memory int8 cell representatives and select cells to explore.
-2. Read their compact residual codes from SSD.
+2. Read their compact residual codes from contiguous SSD slots, with overlapping IO.
 3. Apply metadata filters before candidate admission and rank eligible codes.
 4. Read the best candidates' original vectors and compute exact cosine scores.
 

@@ -53,7 +53,8 @@ static void fission_job_free(FissionJob*j){
 }
 static FissionJob* fission_job_alloc(uint32_t cap,int dim){
     FissionJob*j=calloc(1,sizeof(*j));if(!j)return NULL;
-    j->limit=cap+512;uint32_t n=j->limit,blocks=(n+FISSION_CHUNK-1)/FISSION_CHUNK;
+    j->limit=cap+512;uint32_t n=j->limit,blocks=1;
+    while((uint64_t)blocks*FISSION_CHUNK<n)blocks*=2;
 #define JOB_ALLOC(field,size) do{j->field=malloc(size);if(!j->field)goto fail;j->bytes+=(size);}while(0)
     JOB_ALLOC(spans,(size_t)(blocks+1)*sizeof(*j->spans));
     JOB_ALLOC(incoming,(size_t)n*FISSION_ENTRY);JOB_ALLOC(valid,n);
@@ -173,19 +174,16 @@ static int fission_job_write(AnchorLive*l,FissionJob*j){
     if(fission_job_grow(l,j->other+(j->split?1:0))){pthread_mutex_unlock(&f->publish_mutex);return -1;}
     pthread_rwlock_wrlock(&l->lock);
     if(l->poisoned)goto unlock;
-    uint32_t oldJ=f->J;
     for(int s=0;s<=j->split;s++){
         uint32_t need=(j->count[s]+FISSION_CHUNK-1)/FISSION_CHUNK;
-        while(j->blocks[s]<need){
-            uint32_t b;if(f->free_head!=FISSION_NONE){b=f->free_head;f->free_head=f->chunks[b].next;}
-            else{b=f->J;if(b==UINT32_MAX||fission_chunks(f,b+1))goto unlock;f->J++;}
-            f->chunks[b]=(FissionChunk){FISSION_NONE,0};
-            if(j->blocks[s])f->chunks[j->block_ids[s][j->blocks[s]-1]].next=b;
-            j->block_ids[s][j->blocks[s]++]=b;
+        if(j->blocks[s]<need){
+            FissionCell run;if(fission_slot_reserve(l,j->count[s],&run))goto unlock;
+            j->blocks[s]=run.tail-run.head+1;j->written[s]=0;
+            for(uint32_t k=0;k<j->blocks[s];k++)j->block_ids[s][k]=run.head+k;
         }
-        for(uint32_t k=0;k<need;k++){uint32_t n=j->count[s]-k*FISSION_CHUNK;f->chunks[j->block_ids[s][k]].used=n<FISSION_CHUNK?n:FISSION_CHUNK;}
+        uint32_t left=j->count[s];
+        for(uint32_t k=0;k<j->blocks[s];k++){uint32_t n=left<FISSION_CHUNK?left:FISSION_CHUNK;f->chunks[j->block_ids[s][k]].used=n;left-=n;}
     }
-    if(f->J!=oldJ&&ftruncate(f->fd,(off_t)((uint64_t)f->J*FISSION_CHUNK*FISSION_ENTRY)))goto unlock;
     rc=0;
 unlock:pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&f->publish_mutex);if(rc)return rc;
     for(int s=0;s<=j->split;s++)while(j->written[s]<j->count[s]){
@@ -197,20 +195,6 @@ unlock:pthread_rwlock_unlock(&l->lock);pthread_mutex_unlock(&f->publish_mutex);i
     return 0;
 }
 
-#ifdef FISSIONDB_TESTING
-/* Deterministic test barrier; absent from production builds. */
-static int fission_test_gate[3]={-1,-1,0};
-void anchor_test_fission_gate(int reached,int resume,int phase){fission_test_gate[0]=reached;fission_test_gate[1]=resume;fission_test_gate[2]=phase;}
-static int fission_test_barrier(int phase){
-    if(fission_test_gate[0]<0||fission_test_gate[2]!=phase)return 0;
-    int reached=fission_test_gate[0],resume=fission_test_gate[1];fission_test_gate[0]=-1;
-    char c='s';if(write(reached,&c,1)!=1)return -1;
-    ssize_t n;do{n=read(resume,&c,1);}while(n<0&&errno==EINTR);
-    return n!=1||c=='!'?-1:0;
-}
-#else
-#define fission_test_barrier(phase) 0
-#endif
 
 static int fission_run_job(AnchorLive*l,uint32_t cell){
     LiveFission*f=l->fission;double began=fission_now();int rc=-1;

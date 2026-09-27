@@ -162,6 +162,27 @@ implemented.
 
 ## On-disk files
 
+Adaptive cells own contiguous power-of-two slots, allocated in units of 512
+records. Used records form a dense prefix: a normal cell takes one code read,
+independent of allocation-chunk boundaries. Batched io_uring reads and overlap
+remain enabled. A cell larger than an entire query IO buffer is read in bounded
+portions instead of growing per-query memory.
+
+An append that outgrows its slot copies existing codes into a larger unpublished
+slot, then publishes it with the new records. Split daughters also own contiguous
+slots. Old slots stay intact until a newer checkpoint is durable. Free runs are
+reused; reserved capacity and retired slots contribute to the arena's disk size.
+
+Live checkpoint version 2 records this invariant. Opening a version 1 checkpoint
+streams its codes into contiguous slots without changing cell IDs, representatives,
+membership, encoded bytes or the saved journal prefix. A hard link keeps the old
+arena recoverable until the replacement checkpoint is durable. Migration needs
+temporary disk space for the new arena and delays opening; it does not run inside
+a search request. A killed migration recovers from the checkpoint's file identity.
+Journal and residual formats remain unchanged. Older binaries do not understand
+the v2 checkpoint and can rebuild it from the journal; avoid downgrading an active
+collection when preserving its exact topology matters.
+
 - `meta.txt`, `anchors.bin`, `scale.bin`, `offs.bin`: index configuration,
   representatives, scales and offsets.
 - `blocks.bin`: source quantized cell payloads; the residual converter reads them.

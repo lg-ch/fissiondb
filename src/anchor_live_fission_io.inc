@@ -42,26 +42,41 @@ static int fission_io_wait(AnchorLiveIO*io,FissionReadBatch*b){
     }
     io->io_ms+=fission_now()-t;return failed?-1:0;
 }
-/* Advance a cursor over chunks in ranked-cell order, preserving score/tie order
+/* Advance over contiguous cells in ranked order, preserving score/tie order
  * for width1 and overlapping batches alike. Direct reads may include boundary
- * pages, but only the captured used slots are scored and checksum-validated. */
+ * pages, but only the captured used slots are scored and checksum-validated.
+ * A normal cell is one read. Only a cell larger than the entire bounded buffer
+ * is split across reads; allocation-chunk boundaries never cause extra IO. */
 static int fission_io_prepare(const LiveFission*f,const PackHit*routes,int rn,int*route,uint32_t*block,
                              AnchorLiveIO*io,FissionReadBatch*b,uint8_t*buffer,uint64_t*bytes,uint64_t*entries){
     b->n=0;b->pending=0;size_t used=0;uint64_t file_bytes=(uint64_t)f->J*FISSION_CHUNK*FISSION_ENTRY;
     while(*route<rn&&b->n<io->width){
         uint32_t cell=routes[*route].id;
         if(*block==FISSION_NONE){(*route)++;if(*route<rn)*block=f->cells[routes[*route].id].head;continue;}
-        if(*block>=f->J)return -1;
-        uint32_t count=f->chunks[*block].used;if(!count||count>FISSION_CHUNK)return -1;
+        const FissionCell*c=f->cells+cell;
+        if(*block>=f->J||*block<c->head||*block>c->tail)return -1;
+        uint64_t skipped=((uint64_t)*block-c->head)*FISSION_CHUNK;
+        if(skipped>=c->count){*block=FISSION_NONE;continue;}
+        uint32_t count=c->count-(uint32_t)skipped;
         uint64_t offset=(uint64_t)*block*FISSION_CHUNK*FISSION_ENTRY,length=(uint64_t)count*FISSION_ENTRY;
         uint64_t aligned=io->direct?offset&~UINT64_C(4095):offset;
         uint64_t read_size=io->direct?(length+(offset-aligned)+4095)&~UINT64_C(4095):length;
         size_t allocation=(size_t)((read_size+4095)&~UINT64_C(4095));
+        if(allocation>io->capacity){
+            if(b->n)break;
+            if(io->capacity<=offset-aligned)return -1;
+            uint64_t blocks=(io->capacity-(offset-aligned))/(FISSION_CHUNK*FISSION_ENTRY);
+            if(!blocks)return -1;
+            count=(uint32_t)(blocks*FISSION_CHUNK);length=(uint64_t)count*FISSION_ENTRY;
+            read_size=io->direct?(length+(offset-aligned)+4095)&~UINT64_C(4095):length;
+            allocation=(size_t)((read_size+4095)&~UINT64_C(4095));
+        }
         if(allocation>io->capacity-used)break;
         int i=b->n++;b->offset[i]=aligned;b->length[i]=read_size;
         b->expected[i]=read_size<file_bytes-aligned?read_size:file_bytes-aligned;
         b->dst[i]=buffer+used;b->records[i]=buffer+used+(offset-aligned);b->cell[i]=cell;b->count[i]=count;
-        used+=allocation;*bytes+=read_size;*entries+=count;*block=f->chunks[*block].next;
+        used+=allocation;*bytes+=read_size;*entries+=count;
+        *block=skipped+count<c->count?*block+count/FISSION_CHUNK:FISSION_NONE;
     }
     return b->n?1:(*route>=rn?0:-1);
 }
