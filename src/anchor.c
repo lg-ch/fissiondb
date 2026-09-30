@@ -252,6 +252,18 @@ static void make_signs(int8_t* sgn, int d, uint64_t seed) {
 
 #include "anchor_x86.inc"
 
+const char* anchor_integer_backend(void){
+#if defined(__x86_64__) && defined(__GNUC__)
+    if(anchor_x86_use_avx512)return "avx512bw";
+    if(__builtin_cpu_supports("avx2"))return "avx2";
+#endif
+#if ANC_NEON && defined(__ARM_FEATURE_DOTPROD)
+    return "neon-dotprod";
+#else
+    return "scalar";
+#endif
+}
+
 /* ---------- f16 -> f32 ---------- */
 static inline float h2f(uint16_t h) {
 #if defined(__x86_64__) && defined(__GNUC__)
@@ -313,6 +325,7 @@ static inline float dotf(const float* a, const float* b, int d) {
 /* ---------- dot int8 (SDOT si dispo, sinon scalaire) ---------- */
 static inline int32_t doti8(const int8_t* a, const int8_t* b, int d) {
 #if defined(__x86_64__) && defined(__GNUC__)
+    if(anchor_x86_use_avx512&&d>=64)return anchor_doti8_avx512(a,b,d);
     if(__builtin_cpu_supports("avx2"))return anchor_doti8_avx2(a,b,d);
 #endif
 #if ANC_NEON && defined(__ARM_FEATURE_DOTPROD)
@@ -434,6 +447,7 @@ static inline int32_t score_tq2(const uint8_t* code, const int8_t* q0,
 static inline int32_t score_tq1(const uint8_t* code, const int8_t* qs1,
                                 int stride, int dim) {
 #if defined(__x86_64__) && defined(__GNUC__)
+    if(anchor_x86_use_avx512&&dim>=512)return anchor_score_tq1_avx512(code,qs1,stride,dim);
     if(__builtin_cpu_supports("avx2"))return anchor_score_tq1_avx2(code,qs1,stride,dim);
 #endif
 #if ANC_NEON && defined(__ARM_FEATURE_DOTPROD)

@@ -1,0 +1,70 @@
+{
+  "platform": "Kamatera 4A shared x86 VM, virtual non-rotational disk",
+  "pass_id": 1,
+  "source_base": "5e2a506c21f4062a785f4dc160b36eda912e3ffd",
+  "backend": "avx2",
+  "library_sha256": "7ce611997dde6bf9c526921ff0f2dbdcc935fa9fa6ba1a7577800b809c94fb6d",
+  "n": 113520750,
+  "dim": 1024,
+  "anchors": 200000,
+  "probes": 1536,
+  "rerank": 400,
+  "threads": 1,
+  "queries": 600,
+  "protocol": "Full float16 originals and residual payload on guest disk. Same reused query-to-document validation panel and order as GB10. fadvise DONTNEED before every query; direct residual IO. CPU0 pinned, decimal1GB cgroup, swap0. No ingestion or concurrent queries. Physical device cache is not flushed. Native call latency excludes network and Python HTTP serving.",
+  "file_sizes": {
+    "base.f16bin": 232490496008,
+    "index-200k/anchors.bin": 819200000,
+    "index-200k/offs.bin": 1600008,
+    "index-200k/blocks.bin": 29954363208,
+    "index-200k/scale.bin": 4096,
+    "residual-200k/res512.bin": 16338743568
+  },
+  "workload_sha256": "cfc717722139d863ff06b7bd65d4e4eb7b83d77ad8ab5252f01c83e652848ce9",
+  "started_unix": 1790795454.4645143,
+  "completed_unix": 1790795533.9231994,
+  "resources": {
+    "memory.max": "999997440",
+    "memory.peak": "999997440",
+    "memory.events": "low 0\nhigh 0\nmax 195\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "0",
+    "cpuset.cpus.effective": "0",
+    "cpu.stat": "usage_usec 79831465\nuser_usec 67719674\nsystem_usec 12111791\nnice_usec 0",
+    "cpu.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=558724\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=558724",
+    "io.stat": null
+  },
+  "resources_before": {
+    "memory.max": "999997440",
+    "memory.peak": "999997440",
+    "memory.events": "low 0\nhigh 0\nmax 154\noom 0\noom_kill 0\noom_group_kill 0",
+    "memory.swap.max": "0",
+    "cpuset.cpus.effective": "0",
+    "cpu.stat": "usage_usec 4770941\nuser_usec 1489501\nsystem_usec 3281440\nnice_usec 0",
+    "cpu.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=1631\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=1631",
+    "io.stat": null
+  },
+  "cpu0_steal_percent": 0.0,
+  "recall": 0.9625,
+  "p50_ms": 127.60799602256157,
+  "p95_ms": 177.70576858601993,
+  "p99_ms": 210.195253122365,
+  "mean_ms": 131.78858387982473,
+  "mean_cpu_ms": 124.53007364500013,
+  "mean_stages": {
+    "anchor_ms": 28.646998767852782,
+    "io_ms": 14.906922999322415,
+    "score_ms": 81.14400905519724,
+    "rerank_ms": 6.812531878054142,
+    "total_ms": 131.7216485742728,
+    "entries": 1845177.5033333334,
+    "bytes": 138387415.04
+  },
+  "arm_comparison": {
+    "reference_p50_ms": 52.693151868879795,
+    "reference_recall": 0.9625,
+    "identical_top10_queries": 600,
+    "different_top10_queries": [],
+    "equal_entries_queries": 600,
+    "max_score_delta_for_identical_ids": 1.430511474609375e-06
+  }
+}

@@ -23,6 +23,14 @@ from .metatypes import encode_meta, compile_where
 import numpy as np
 from ._anchor_native import _lib
 
+_lib.anchor_integer_backend.argtypes = []
+_lib.anchor_integer_backend.restype = C.c_char_p
+
+
+def integer_backend():
+    """Selected int8 routing/TQ1 backend (short vectors may use narrower SIMD)."""
+    return _lib.anchor_integer_backend().decode('ascii')
+
 
 class _Stats(C.Structure):
     _fields_ = [(name, C.c_double) for name in

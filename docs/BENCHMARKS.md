@@ -37,6 +37,13 @@ scoring overlap. Mean aligned code traffic was 138.39 MB per query.
 
 ## Comparing another machine
 
+On a Kamatera x86 VM, runtime AVX-512BW measured **111.57–112.83 ms median**
+versus **121.77–127.61 ms with AVX2**, at the same 96.25% recall on this complete
+MS MARCO index. All four passes returned identical IDs and scores. These are
+native timings inside the guest, with a 1 GB cap and one query thread.
+[AVX-512 protocol, per-pass results and hardware limits](validation/avx512-20260930.md)
+include the observed IO variability and exactness checks.
+
 Use the same immutable index, complete original vectors, query/GT files, query
 order, memory cap, cache protocol and search budgets. Report recall again on the
 target machine; floating-point differences across architectures can change ties.

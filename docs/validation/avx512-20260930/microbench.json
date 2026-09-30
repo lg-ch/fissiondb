@@ -1,0 +1,82 @@
+[
+  {
+    "pass": 0,
+    "backend": "avx2",
+    "anchors": 200000,
+    "dim": 1024,
+    "routing_ms": 21.499879,
+    "codes": 1048576,
+    "score_ms": 15.891753,
+    "checksum": -80816740
+  },
+  {
+    "pass": 1,
+    "backend": "avx512bw",
+    "anchors": 200000,
+    "dim": 1024,
+    "routing_ms": 20.675872,
+    "codes": 1048576,
+    "score_ms": 14.382953,
+    "checksum": -80816740
+  },
+  {
+    "pass": 2,
+    "backend": "avx512bw",
+    "anchors": 200000,
+    "dim": 1024,
+    "routing_ms": 20.26916,
+    "codes": 1048576,
+    "score_ms": 16.664722,
+    "checksum": -80816740
+  },
+  {
+    "pass": 3,
+    "backend": "avx2",
+    "anchors": 200000,
+    "dim": 1024,
+    "routing_ms": 21.918905,
+    "codes": 1048576,
+    "score_ms": 15.72798,
+    "checksum": -80816740
+  },
+  {
+    "pass": 4,
+    "backend": "avx2",
+    "anchors": 200000,
+    "dim": 1024,
+    "routing_ms": 22.328979,
+    "codes": 1048576,
+    "score_ms": 15.671494,
+    "checksum": -80816740
+  },
+  {
+    "pass": 5,
+    "backend": "avx512bw",
+    "anchors": 200000,
+    "dim": 1024,
+    "routing_ms": 20.936429,
+    "codes": 1048576,
+    "score_ms": 14.717488,
+    "checksum": -80816740
+  },
+  {
+    "pass": 6,
+    "backend": "avx512bw",
+    "anchors": 200000,
+    "dim": 1024,
+    "routing_ms": 20.496979,
+    "codes": 1048576,
+    "score_ms": 14.737442,
+    "checksum": -80816740
+  },
+  {
+    "pass": 7,
+    "backend": "avx2",
+    "anchors": 200000,
+    "dim": 1024,
+    "routing_ms": 21.930703,
+    "codes": 1048576,
+    "score_ms": 15.626491,
+    "checksum": -80816740
+  }
+]

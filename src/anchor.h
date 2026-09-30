@@ -4,6 +4,9 @@
 #include <stddef.h>
 typedef struct AnchorIndex AnchorIndex;
 typedef struct AnchorQuery AnchorQuery;
+/* Runtime backend for int8 routing/TQ1 scoring; shorter vectors may use AVX2.
+   FISSIONDB_DISABLE_AVX512 is read once when loading the native library. */
+const char* anchor_integer_backend(void);
 typedef struct {
     double anchor_ms, io_ms, score_ms, rerank_ms, total_ms;
     uint64_t entries, bytes;

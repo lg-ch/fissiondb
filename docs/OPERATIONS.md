@@ -18,6 +18,29 @@ This builds `fissiondb-engine` and `libfissiondb_anchor.so`, and installs the
 `fissiondb` Python package with `fissiondb-build`, `fissiondb-serve` and
 `fissiondb-calibrate`. These instructions install the local repository.
 
+### CPU kernel selection
+
+The generic x86-64 build detects usable CPU/OS features at library load. It uses
+AVX-512F/BW for int8 routing and 512-bit TQ1 residual scoring when available,
+with AVX2 for shorter vectors and a scalar fallback without AVX2. The AVX-512
+kernels do not require VNNI. F16C conversion and the ARM NEON path are unchanged.
+The build does not enable AVX-512 globally, and no index conversion is needed.
+
+```python
+from fissiondb import integer_backend
+print(integer_backend())  # avx512bw, avx2, neon-dotprod or scalar
+```
+
+For an explicit AVX2 comparison or a workload that performs better with narrower
+vectors, set `FISSIONDB_DISABLE_AVX512=1` before starting the process. The value
+is read once when the native library loads; changing it afterward has no effect.
+Unset, empty or `0` enables automatic selection; any other nonempty value disables
+AVX-512. The reported backend concerns int8 routing and TQ1 scoring, not every
+operation in a query. TQ2/TQ4 and floating-point arithmetic are unchanged.
+
+Instruction width alone does not predict retrieval latency. Compare the same
+index, query budget, cache policy, memory cap and CPU affinity on the same host.
+
 ## Create an index
 
 For live ingestion from an empty collection:

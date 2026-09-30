@@ -29,7 +29,9 @@ journal offsets and checksums. Multiple cell assignments duplicate records.
 Exact reranking defaults to 400 candidates.
 
 Each query has its own bounded scratch buffers and IO context. The index is
-shared. The native engine uses ARM NEON or runtime-selected x86 AVX2/F16C kernels.
+shared. On Linux, the native engine uses ARM NEON or runtime-selected x86
+AVX-512BW / AVX2 kernels for int8 routing and TQ1 scoring, plus F16C conversion.
+Generic x86 binaries retain the fallback for CPUs without those extensions.
 
 [Architecture and data layout](docs/ARCHITECTURE.md)
 
@@ -47,6 +49,11 @@ caches were not flushed. These are native retrieval timings, without concurrent
 ingestion or HTTP/network overhead. The query panel was reused during development.
 
 [Protocol, evidence and scope](docs/BENCHMARKS.md)
+
+On a Kamatera x86 VM, AVX-512BW measured **112–113 ms median** on that same
+113M index, versus **122–128 ms with AVX2**, with unchanged recall and results.
+[Controlled comparison and portability limits](docs/validation/avx512-20260930.md)
+describe the guest hardware and timing variability.
 
 On a separately rebuilt **10M-vector, 768d adaptive live index**, retrieval after
 ingestion measured **77.20 ms median, 95.38 ms p95 and 97.15% recall@10** on one
