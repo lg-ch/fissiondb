@@ -101,7 +101,11 @@ with AnchorIndex.create('/data/collection', dim=768) as index:
     print(index.fission_stats)
 ```
 
-The default cell capacity is 2,048 assignments. A background worker prepares
+New collections choose their cell capacity automatically as `max(64, 2 × dim)`
+assignments, using the input dimension: 256 at 128d, 1,024 at 512d, 1,536 at
+768d and 2,048 at 1024d. An explicit capacity overrides this rule. The resolved
+value persists; reopening an older collection keeps its saved threshold.
+A background worker prepares
 overflowing cells' daughters while queries continue on the published parent.
 Concurrent inserts remain searchable there until their codes have caught up;
 a short write lock publishes the daughters. A bounded backlog applies ingestion
@@ -113,7 +117,7 @@ For an existing frozen index and its original vectors:
 fissiondb-build convert --index /data/index --base /data/base.f16bin --output /data/residual
 fissiondb-serve --index /data/index --base /data/base.f16bin \
   --residual-dir /data/residual --live-dir /data/live --rerank 400 \
-  --fission-cell-capacity 2048
+  --fission-cell-capacity 0
 ```
 
 ```python
@@ -121,7 +125,7 @@ from fissiondb import AnchorIndex
 
 with AnchorIndex('/data/index', '/data/base.f16bin',
                  residual_dir='/data/residual', live_dir='/data/live',
-                 fission_cell_capacity=2048) as index:
+                 fission_cell_capacity=0) as index:
     with index.context(nprobe=1536, rerank=400, threads=1) as query:
         ids, scores, stats = query.search(query_vector, top_k=10,
                                          where={'language': 'fr'})

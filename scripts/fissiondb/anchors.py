@@ -162,7 +162,7 @@ class AnchorIndex:
         if fission_cell_capacity is not None:
             fission_cell_capacity=operator.index(fission_cell_capacity)
             fission_max_cells=operator.index(fission_max_cells)
-            if not 64 <= fission_cell_capacity <= 65536 or not 2 <= fission_max_cells <= 1_000_000:
+            if (fission_cell_capacity != 0 and not 64 <= fission_cell_capacity <= 65536) or not 2 <= fission_max_cells <= 1_000_000:
                 raise ValueError('Invalid fission cell or memory capacity')
             if not (live or live_dir is not None) or residual_dir is None:
                 raise ValueError('Automatic fission requires live and residual storage')
@@ -217,16 +217,19 @@ class AnchorIndex:
                 raise
 
     @classmethod
-    def create(cls, directory, dim, *, cell_capacity=2048, max_cells=300_000,
+    def create(cls, directory, dim, *, cell_capacity=None, max_cells=300_000,
                auto_pack_bytes=256*1024*1024, **kwargs):
         """Create an empty local collection with automatic live-cell fission.
 
         The small empty frozen header is a format bootstrap, not a training set.
         Live representatives are chosen from inserted vectors and grow by splits.
+        Omitted/None or zero capacity selects max(64, 2*dim) in the native engine.
+        An explicit 64..65536 overrides it. The resolved threshold is persisted.
         """
         dim=operator.index(dim)
         if not 1<=dim<=1024:raise ValueError('Dimensions must be in 1..1024')
-        if not 64<=operator.index(cell_capacity)<=65536 or not 2<=operator.index(max_cells)<=1_000_000:
+        cell_capacity=0 if cell_capacity is None else operator.index(cell_capacity)
+        if (cell_capacity != 0 and not 64<=cell_capacity<=65536) or not 2<=operator.index(max_cells)<=1_000_000:
             raise ValueError('Invalid fission capacity')
         directory=Path(directory).resolve();directory.mkdir(parents=True,exist_ok=False)
         padded=max(8,1<<(dim-1).bit_length())

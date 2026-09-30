@@ -88,8 +88,12 @@ deployment memory with a cgroup and measure concurrent contexts explicitly.
 
 New collections start empty. Their first insertion initializes live
 representatives; subsequent insertions scan int8 representatives and attach to
-the two best cells. Once a cell exceeds its configured capacity (2,048 by
-default), the engine reads its current vectors, removes obsolete versions and
+the two best cells. New collections resolve their default capacity as
+`max(64, 2 × input_dimension)`: 256 at 128d, 1,024 at 512d, 1,536 at 768d and
+2,048 at 1024d. The native engine uses the original dimension, independently of
+residual padding. The value is persisted once; existing collections retain their
+saved threshold and an explicit capacity overrides the default. Once a cell
+exceeds its configured capacity, the engine reads its current vectors, removes obsolete versions and
 splits it if it still overflows.
 
 Splitting samples 16 pairs on 64 seeded rotated coordinates, chooses the most

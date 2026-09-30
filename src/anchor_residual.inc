@@ -92,8 +92,11 @@ static int residual_encode_fission(void*user,const float*v,const int8_t*center,u
 }
 static void residual_sketch_fission(void*user,const float*v,float*out){const AnchorIndex*idx=user;rot_seeded(v,out,idx->sgn,idx->meta.dim);}
 int anchor_index_enable_fission(AnchorIndex*idx,uint32_t cap,uint32_t maximum){
-    if(!idx||!idx->live||idx->residual_fd<0||__atomic_load_n(&idx->contexts,__ATOMIC_SEQ_CST))return -1;
-    if(anchor_live_has_fission(idx->live)){uint32_t saved_cap=0,saved_max=0;return anchor_live_fission_config(idx->live,&saved_cap,&saved_max)==1&&cap==saved_cap&&maximum==saved_max?0:-1;}
+    if(!idx||!idx->live||idx->residual_fd<0||idx->meta.input_dim<1||idx->meta.input_dim>1024||__atomic_load_n(&idx->contexts,__ATOMIC_SEQ_CST))return -1;
+    if(anchor_live_has_fission(idx->live)){uint32_t saved_cap=0,saved_max=0;return anchor_live_fission_config(idx->live,&saved_cap,&saved_max)==1&&(!cap||cap==saved_cap)&&maximum==saved_max?0:-1;}
+    /* Resolve once from the original width, before persisting the config.
+       Existing collections retain their saved capacity, including overrides. */
+    if(!cap){cap=2u*(uint32_t)idx->meta.input_dim;if(cap<64)cap=64;}
     AnchorFissionOps ops={doti8,residual_encode_fission,residual_sketch_fission,residual_center_dim(idx)};
     return anchor_live_enable_fission(idx->live,cap,maximum,&ops,idx);
 }

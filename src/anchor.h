@@ -32,7 +32,9 @@ uint64_t anchor_index_bytes(const AnchorIndex* index);
 int anchor_index_enable_live(AnchorIndex* index, const char* live_dir);
 /* Enable background splitting of live cells before query contexts are created.
    Frozen snapshots remain immutable; live cells route independently. Existing
-   persisted configuration is loaded automatically with the live journal. */
+   persisted configuration is loaded automatically with the live journal.
+   cell_capacity=0 keeps a saved capacity or resolves max(64,2*input_dimension)
+   for a new configuration (dimensions 1..1024), then persists that value. */
 int anchor_index_enable_fission(AnchorIndex*,uint32_t cell_capacity,uint32_t max_cells);
 int anchor_index_fission_stats(AnchorIndex*,uint64_t values[8],double timings[3]);
 /* Wait for queued splits; readers continue. Quiesce ingestion to drain fully. */

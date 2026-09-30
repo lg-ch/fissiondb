@@ -252,7 +252,8 @@ def main():
     parser.add_argument('--auto-pack-interval', type=float, default=30)
     parser.add_argument('--s3-url')
     parser.add_argument('--residual-dir')
-    parser.add_argument('--fission-cell-capacity',type=int,default=None,help='Enable automatic live-cell splitting (64..65536)')
+    parser.add_argument('--fission-cell-capacity',type=int,default=None,
+                        help='Enable live-cell splitting: 0 chooses max(64, 2*input dimension), or set 64..65536; saved thresholds are retained')
     parser.add_argument('--fission-max-cells',type=int,default=300_000)
     parser.add_argument('--float-specs', default='{}', help='JSON mapping of float fields to decimal precision')
     args = parser.parse_args()

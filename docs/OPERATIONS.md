@@ -47,15 +47,26 @@ For live ingestion from an empty collection:
 
 ```sh
 fissiondb-build create --index /data/collection --dim 768 \
-  --cell-capacity 2048 --max-cells 300000
+  --max-cells 300000
 fissiondb-serve --collection /data/collection --workers 4
 ```
 
 `AnchorIndex.create(path, dim=768)` provides the same operation in Python.
 The destination must not exist. The native engine creates representatives from
 inserted vectors and splits overflowing cells automatically. Supported input
-dimensions are 1–1024. Cell capacity must be 64–65,536 and the cell-count ceiling
-2–1,000,000. These values persist with the collection.
+dimensions are 1–1024. By default, the native engine resolves cell capacity as
+`max(64, 2 × input_dimension)`: 256 at 128d, 1,024 at 512d, 1,536 at 768d and
+2,048 at 1024d. The original dimension is used, not the padded residual width.
+`cell_capacity=None` or `0` in Python, or `--cell-capacity 0` in the CLI, selects
+this policy; an explicit 64–65,536 overrides it. The cell-count ceiling remains
+2–1,000,000. The resolved values persist with the collection, and the create CLI
+reports `cell_capacity`. Read it in Python with `index.fission_capacity`.
+
+Reopening a collection retains its saved threshold, including an older default
+or a manual override. Automatic sizing runs only when creating a new fission
+configuration; it adds no calibration scan or per-insertion decision. The rule
+is a starting policy for cell sizes, not a guarantee of recall or constant total
+RAM across geometries. It does not change probes, reranks or residual encoding.
 
 `max_cells` bounds representative growth, not total RAM. For example, 300,000
 representatives at an input dimension of 1024 require about 307 MB for int8
@@ -105,8 +116,11 @@ End-to-end query latency must still be measured under the intended workload.
 To reopen from Python, supply the collection directory, its `base.f16bin`,
 `residual` and `live` paths to `AnchorIndex`, as in the examples below. Fission
 configuration loads automatically. To add adaptive live ingestion to an existing
-residual index, use `fission_cell_capacity=2048`, or pass
-`--fission-cell-capacity 2048` to the server. Frozen cells remain immutable.
+residual index, use `fission_cell_capacity=0`, or pass
+`--fission-cell-capacity 0` to the server. This selects the native-dimension rule
+for a new configuration and retains the threshold if already saved. Omit the
+option when simply reopening a collection; its full configuration loads from
+disk. Frozen cells remain immutable.
 
 For an offline frozen build:
 
