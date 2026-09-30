@@ -89,7 +89,7 @@ static int fission_io_score(const AnchorLive*l,const FissionReadBatch*b,AnchorLi
         memcpy(&id,p,4);memcpy(&offset,p+4,8);memcpy(&crc,p+80,4);
         if(XXH32(p,80,b->cell[i])!=crc)return -1;
         if(!fission_current(l,id,offset)||(allowed&&!roaring_bitmap_contains(allowed,id)))continue;
-        float score=score_code(user,f->centers+(size_t)b->cell[i]*l->dim,p+12);
+        float score=score_code(user,f->centers+(size_t)b->cell[i]*f->ops.center_dim,p+12);
         if(!isfinite(score))return -1;
         pack_offer(hits,hn,2*capacity,(PackHit){score,id,offset});
     }
@@ -108,7 +108,7 @@ int anchor_live_search_fission(const AnchorLive*l,int probes,const float*q,const
     for(int d=0;d<l->dim;d++)mx=fmaxf(mx,fabsf(q[d]));
     for(int d=0;d<l->dim;d++)q8[d]=(int8_t)lrintf(q[d]*127/fmaxf(mx,1e-30f));
     for(uint32_t k=0;k<f->K;k++)if(f->cells[k].count)
-        pack_offer(routes,&rn,probes,(PackHit){f->ops.dot(q8,f->centers+(size_t)k*l->dim,l->dim)*f->scales[k],k,0});
+        pack_offer(routes,&rn,probes,(PackHit){f->ops.dot(q8,f->centers+(size_t)k*f->ops.center_dim,f->ops.center_dim)*f->scales[k],k,0});
     qsort(routes,rn,sizeof(*routes),pack_hit_cmp);io->route_ms=fission_now()-t;
     io->direct=io->direct&&f->direct_fd>=0;
     int fd=io->direct?f->direct_fd:f->fd,route=0,current=0;

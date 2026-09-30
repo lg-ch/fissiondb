@@ -153,10 +153,10 @@ static int fission_job_grow(AnchorLive*l,uint32_t need){
     if(need>f->maximum)return -1;
     uint32_t n=f->cell_capacity;
     while(n<need){if(n>f->maximum/2){n=f->maximum;break;}n*=2;}
-    FissionCell*c=calloc(n,sizeof(*c));int8_t*centers=calloc(n,(size_t)l->dim);
+    FissionCell*c=calloc(n,sizeof(*c));int8_t*centers=calloc(n,(size_t)f->ops.center_dim);
     float*scales=calloc(n,4);uint32_t*next=calloc(n,4);uint8_t*queued=calloc(n,1);
     if(!c||!centers||!scales||!next||!queued){free(c);free(centers);free(scales);free(next);free(queued);return -1;}
-    memcpy(centers,f->centers,(size_t)f->K*l->dim);memcpy(scales,f->scales,(size_t)f->K*4);
+    memcpy(centers,f->centers,(size_t)f->K*f->ops.center_dim);memcpy(scales,f->scales,(size_t)f->K*4);
     pthread_rwlock_wrlock(&l->lock);
     memcpy(c,f->cells,(size_t)f->K*sizeof(*c));memcpy(next,f->queue_next,(size_t)f->K*4);memcpy(queued,f->queued,f->K);
     FissionCell*oldc=f->cells;int8_t*oldcenters=f->centers;float*oldscales=f->scales;
@@ -200,7 +200,7 @@ static int fission_run_job(AnchorLive*l,uint32_t cell){
     LiveFission*f=l->fission;double began=fission_now();int rc=-1;
     FissionJob*j=fission_job_alloc(f->cap,l->dim);if(!j)return -1;
     j->parent=cell;pthread_rwlock_wrlock(&l->lock);j->other=f->K;
-    memcpy(j->centers[0],f->centers+(size_t)cell*l->dim,l->dim);j->scales[0]=f->scales[cell];
+    memcpy(j->centers[0],f->centers+(size_t)cell*f->ops.center_dim,f->ops.center_dim);j->scales[0]=f->scales[cell];
     f->scratch_bytes=j->bytes;if(j->bytes>f->peak_scratch_bytes)f->peak_scratch_bytes=j->bytes;
     pthread_rwlock_unlock(&l->lock);
     if(fission_job_prepare(l,j))goto done;
@@ -219,7 +219,7 @@ static int fission_run_job(AnchorLive*l,uint32_t cell){
         for(int s=0;s<=j->split;s++){
             uint32_t k=s?j->other:cell;
             f->cells[k]=(FissionCell){j->blocks[s]?j->block_ids[s][0]:FISSION_NONE,j->blocks[s]?j->block_ids[s][j->blocks[s]-1]:FISSION_NONE,j->count[s]};
-            memcpy(f->centers+(size_t)k*l->dim,j->centers[s],l->dim);f->scales[k]=j->scales[s];
+            memcpy(f->centers+(size_t)k*f->ops.center_dim,j->centers[s],f->ops.center_dim);f->scales[k]=j->scales[s];
             if(j->count[s]>f->cap+256)f->pressure++;
         }
         if(j->split){f->K++;f->splits++;f->rewritten+=j->count[0]+j->count[1];}

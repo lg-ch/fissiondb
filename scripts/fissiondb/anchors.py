@@ -46,6 +46,12 @@ _lib.anchor_index_fission_progress.argtypes = _lib.anchor_index_fission_stats.ar
 _lib.anchor_index_fission_progress.restype = C.c_int
 _lib.anchor_index_fission_flush.argtypes = [C.c_void_p]
 _lib.anchor_index_fission_flush.restype = C.c_int
+_lib.anchor_index_fission_set_capacity.argtypes = [C.c_void_p,C.c_uint32]
+_lib.anchor_index_fission_set_capacity.restype = C.c_int
+_lib.anchor_index_fission_capacity.argtypes = [C.c_void_p]
+_lib.anchor_index_fission_capacity.restype = C.c_uint32
+_lib.anchor_index_fission_center_info.argtypes = [C.c_void_p,C.POINTER(C.c_uint64)]
+_lib.anchor_index_fission_center_info.restype = C.c_int
 _lib.anchor_query_create.argtypes = [C.c_void_p, C.c_int, C.c_int, C.c_int,
                                    C.c_uint64, C.c_char_p, C.c_int]
 _lib.anchor_query_create.restype = C.c_void_p
@@ -245,6 +251,9 @@ class AnchorIndex:
             result.update(zip(('pending_cells','preparing','queries_during_prepare','delta_records',
                               'backpressure_waits','scratch_bytes','peak_scratch_bytes','publishes'),map(int,values)))
             result.update(zip(('publish_total_ms','publish_max_ms','last_publish_ms'),map(float,timings)))
+            if _lib.anchor_index_fission_center_info(self._handle,values):
+                raise OSError('Fission center memory unavailable')
+            result.update(zip(('center_dim','center_bytes','center_allocated_bytes'),map(int,values[:3])))
             return result
 
     def flush_fission(self):
@@ -274,6 +283,30 @@ class AnchorIndex:
             destination.mkdir(parents=True, exist_ok=True)
             if _lib.anchor_index_snapshot_live(handle, str(destination).encode()):
                 raise OSError('Live snapshot failed or destination already contains a snapshot')
+
+    @property
+    def fission_capacity(self):
+        with self._lock:
+            self._require_live()
+            capacity=_lib.anchor_index_fission_capacity(self._handle)
+            if not capacity:raise ValueError('Automatic fission is unavailable')
+            return capacity
+
+    def set_fission_capacity(self,capacity):
+        """Persist a threshold and queue existing oversized cells for splitting.
+
+        Does not wait for those splits. Call flush_fission() before measuring a
+        drained topology. Reductions requiring more than capacity+512 scratch
+        entries are rejected; reduce in stages and flush between them.
+        """
+        capacity=operator.index(capacity)
+        if not 64<=capacity<=65536:raise ValueError('Fission capacity must be in 64..65536')
+        with self._lock:
+            self._require_live()
+            if not self.fission:raise ValueError('Automatic fission is not enabled')
+            rc=_lib.anchor_index_fission_set_capacity(self._handle,capacity)
+            if rc==-2:raise ValueError('Cells exceed capacity+512; reduce in stages and flush fission')
+            if rc:raise OSError('Cannot persist fission capacity; reopen after an IO failure')
 
     def pack_live(self):
         """Persist a derived live snapshot or an adaptive-cell checkpoint.
@@ -444,6 +477,9 @@ class AnchorIndex:
                 result['fission'].update(zip(('pending_cells','preparing','queries_during_prepare','delta_records',
                     'backpressure_waits','scratch_bytes','peak_scratch_bytes','publishes'),map(int,numbers)))
                 result['fission'].update(zip(('publish_total_ms','publish_max_ms','last_publish_ms'),map(float,timings)))
+                if _lib.anchor_index_fission_center_info(self._handle,numbers):
+                    raise OSError('Fission center memory unavailable')
+                result['fission'].update(zip(('center_dim','center_bytes','center_allocated_bytes'),map(int,numbers[:3])))
             return result
 
     @property

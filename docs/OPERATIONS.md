@@ -35,7 +35,7 @@ dimensions are 1–1024. Cell capacity must be 64–65,536 and the cell-count ce
 2–1,000,000. These values persist with the collection.
 
 `max_cells` bounds representative growth, not total RAM. For example, 300,000
-representatives at a padded dimension of 1024 require about 307 MB for int8
+representatives at an input dimension of 1024 require about 307 MB for int8
 centers, plus metadata, allocation capacity, query buffers and the live journal's
 in-memory bookkeeping. Once the ceiling is reached, ingestion continues into
 larger cells. Monitor `/stats` or `index.fission_stats` for cell count, largest
@@ -49,6 +49,28 @@ durable commit and remain searchable on the parent while daughters are prepared.
 lock. The cell capacity is an eventual target: a pending split can temporarily
 exceed it. The cell-count ceiling can prevent further splitting altogether.
 An overloaded split queue applies backpressure to vector writes, not readers.
+
+For an existing adaptive collection, change the split threshold through the
+native API rather than editing its files:
+
+```python
+index.set_fission_capacity(1536)
+index.flush_fission()  # wait if the next measurement needs a drained topology
+print(index.fission_capacity)
+```
+
+The change persists atomically, keeps the current representatives until normal
+background splits publish replacements, and queues all existing oversized cells.
+Increasing the threshold does not merge cells. To preserve bounded split scratch,
+a reduction is rejected if an existing cell exceeds the new threshold plus 512
+entries while the cell-count ceiling permits more splits. Reduce in stages and
+flush between stages in that case. The setting does not change query probes,
+rerank count or residual encoding. Adaptive representatives use the native input
+width (768 bytes each for 768d), independently of the residual transform's padded
+width. Smaller cells create more representatives. Memory also depends on spare
+array capacity and metadata: `center_bytes` measures used representative payload,
+`center_allocated_bytes` measures its allocation, and `owned_bytes` covers the
+adaptive structure. Measure recall and memory before adopting a threshold policy.
 
 Progress counters include `pending_cells`, `preparing`, `queries_during_prepare`,
 `delta_records`, `backpressure_waits`, `scratch_bytes` and `peak_scratch_bytes`.

@@ -43,14 +43,14 @@ static int fission_append_encode(AnchorLive*l,FissionAppend*t,int row,uint32_t p
     for(int d=0;d<l->dim;d++)q[d]=(int8_t)lrintf(v[d]*127/fmaxf(mx,1e-30f));
     float best[2]={-INFINITY,-INFINITY};pick[0]=0;pick[1]=1;
     for(uint32_t k=0;k<f->K;k++){
-        float score=f->ops.dot(q,f->centers+(size_t)k*l->dim,l->dim)*f->scales[k];
+        float score=f->ops.dot(q,f->centers+(size_t)k*f->ops.center_dim,f->ops.center_dim)*f->scales[k];
         if(score>best[1]){if(score>best[0]){best[1]=best[0];pick[1]=pick[0];best[0]=score;pick[0]=k;}else{best[1]=score;pick[1]=k;}}
     }
     if(pick[0]==pick[1])return -1;
     for(int side=0;side<2;side++){
         uint8_t*code=t->codes[row*2+side].code;
         memcpy(code,&r->id,4);memcpy(code+4,t->offsets+row,8);
-        if(f->ops.encode(f->user,v,f->centers+(size_t)pick[side]*l->dim,code+12))return -1;
+        if(f->ops.encode(f->user,v,f->centers+(size_t)pick[side]*f->ops.center_dim,code+12))return -1;
         uint32_t crc=XXH32(code,80,pick[side]);memcpy(code+80,&crc,4);
     }
     return 0;

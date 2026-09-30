@@ -74,22 +74,34 @@ static int residual_encode_live(void* user,uint32_t cell,const float* v,uint8_t*
     if(residual_anchor(idx,cell,a,ar))return -1;
     return residual_encode_vector(idx,v,a,ar,code);
 }
+static int residual_center_dim(const AnchorIndex*idx){
+#if defined(FISSIONDB_TESTING) && defined(FISSIONDB_TEST_PADDED_CENTERS)
+    return idx->meta.dim; /* reference layout for exact-equivalence tests */
+#else
+    return idx->meta.input_dim;
+#endif
+}
 static int residual_encode_fission(void*user,const float*v,const int8_t*center,uint8_t*code){
     const AnchorIndex*idx=user;float a[1024],ar[1024];double norm=0;
-    for(int d=0;d<idx->meta.dim;d++)norm+=(int)center[d]*(int)center[d];
+    int native=residual_center_dim(idx);
+    for(int d=0;d<native;d++)norm+=(int)center[d]*(int)center[d];
     if(norm<=0)return -1;
-    float scale=1/sqrt(norm);for(int d=0;d<idx->meta.dim;d++)a[d]=center[d]*scale;
+    float scale=1/sqrt(norm);for(int d=0;d<native;d++)a[d]=center[d]*scale;
+    for(int d=native;d<idx->meta.dim;d++)a[d]=0;
     rot_seeded(a,ar,idx->sgn,idx->meta.dim);return residual_encode_vector(idx,v,a,ar,code);
 }
 static void residual_sketch_fission(void*user,const float*v,float*out){const AnchorIndex*idx=user;rot_seeded(v,out,idx->sgn,idx->meta.dim);}
 int anchor_index_enable_fission(AnchorIndex*idx,uint32_t cap,uint32_t maximum){
     if(!idx||!idx->live||idx->residual_fd<0||__atomic_load_n(&idx->contexts,__ATOMIC_SEQ_CST))return -1;
     if(anchor_live_has_fission(idx->live)){uint32_t saved_cap=0,saved_max=0;return anchor_live_fission_config(idx->live,&saved_cap,&saved_max)==1&&cap==saved_cap&&maximum==saved_max?0:-1;}
-    AnchorFissionOps ops={doti8,residual_encode_fission,residual_sketch_fission};
+    AnchorFissionOps ops={doti8,residual_encode_fission,residual_sketch_fission,residual_center_dim(idx)};
     return anchor_live_enable_fission(idx->live,cap,maximum,&ops,idx);
 }
 int anchor_index_fission_stats(AnchorIndex*idx,uint64_t values[8],double timings[3]){return idx?anchor_live_fission_stats(idx->live,values,timings):-1;}
 int anchor_index_fission_flush(AnchorIndex*idx){return idx?anchor_live_fission_flush(idx->live):-1;}
+int anchor_index_fission_set_capacity(AnchorIndex*idx,uint32_t cap){return idx?anchor_live_fission_set_capacity(idx->live,cap):-1;}
+uint32_t anchor_index_fission_capacity(AnchorIndex*idx){return idx?anchor_live_fission_capacity(idx->live):0;}
+int anchor_index_fission_center_info(AnchorIndex*idx,uint64_t values[3]){return idx?anchor_live_fission_center_info(idx->live,values):-1;}
 int anchor_index_fission_progress(AnchorIndex*idx,uint64_t values[8],double timings[3]){return idx?anchor_live_fission_progress(idx->live,values,timings):-1;}
 int anchor_index_pack_live(AnchorIndex* idx) {
     if(!idx||idx->residual_fd<0||!idx->live)return -1;
@@ -124,9 +136,11 @@ static float residual_score_fission(void*user,const int8_t*center,const uint8_t*
     if(s->center!=center){
         int dim=idx->meta.dim,cd=idx->residual_cdim,streams=8/idx->residual_bits,stride=cd/streams;
         float ar[1024],weights[512],mx=0;double norm=0;
-        for(int d=0;d<dim;d++)norm+=(int)center[d]*(int)center[d];
+        int native=residual_center_dim(idx);
+        for(int d=0;d<native;d++)norm+=(int)center[d]*(int)center[d];
         if(norm<=0)return NAN;
-        float scale=1/sqrt(norm);for(int d=0;d<dim;d++)c->vf[d]=center[d]*scale;
+        float scale=1/sqrt(norm);for(int d=0;d<native;d++)c->vf[d]=center[d]*scale;
+        for(int d=native;d<dim;d++)c->vf[d]=0;
         rot_seeded(c->vf,ar,idx->sgn,dim);state->qa=dotf(c->qn,c->vf,dim);
         for(int d=0;d<cd;d++){weights[d]=c->qr[d]-state->qa*ar[d];mx=fmaxf(mx,fabsf(weights[d]));}
         state->qs=mx/127;state->qsum=0;

@@ -20,6 +20,9 @@ arrives, without an offline training set.
 3. Apply metadata filters before candidate admission and rank eligible codes.
 4. Read the best candidates' original vectors and compute exact cosine scores.
 
+Adaptive representatives use the input dimension in RAM: a 768d center occupies
+768 int8 bytes, even when the residual transform uses a wider padded dimension.
+
 Residuals use up to 512 bits per vector, with an encoding adapted to dimensions
 1–1024. Frozen records occupy 72 bytes; live records occupy 84 bytes including
 journal offsets and checksums. Multiple cell assignments duplicate records.
@@ -50,6 +53,15 @@ ingestion measured **77.20 ms median, 95.38 ms p95 and 97.15% recall@10** on one
 GB10 core, with a 2 GB total-memory cap. Contiguous live cells use direct IO by
 default. [Protocol and buffered/direct comparison](docs/validation/contiguous-direct-20260927.md)
 include cache conditions, exact result checks and current live storage overhead.
+
+Appending **50,000 vectors** to that collection with three CPU cores (ingestion,
+splitting and search) measured **77.94 ms median / 83.00 ms p95** during ingestion.
+Throughput was **881 vectors/s acknowledged**, or **609 vectors/s including final
+split drainage**, under the same 2 GB cap. On the resulting 10.05M collection,
+lowering the cell capacity from 2,048 to 1,536 reduced candidates by 29%; recall
+at the fixed search budget changed from 97.17% to 96.52%.
+[Live protocol, memory accounting and threshold comparison](docs/validation/live50k-native-centers-20260927.md)
+describe the measured tradeoffs and the native-width center validation.
 
 ## Build and run
 

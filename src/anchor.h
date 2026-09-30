@@ -34,6 +34,12 @@ int anchor_index_enable_fission(AnchorIndex*,uint32_t cell_capacity,uint32_t max
 int anchor_index_fission_stats(AnchorIndex*,uint64_t values[8],double timings[3]);
 /* Wait for queued splits; readers continue. Quiesce ingestion to drain fully. */
 int anchor_index_fission_flush(AnchorIndex*);
+/* Persist a new split threshold and enqueue existing oversized cells. Returns
+   -2 if a cell exceeds threshold+512: reduce in stages and flush between them. */
+int anchor_index_fission_set_capacity(AnchorIndex*,uint32_t);
+uint32_t anchor_index_fission_capacity(AnchorIndex*);
+/* Native center width, used center bytes, allocated center bytes. */
+int anchor_index_fission_center_info(AnchorIndex*,uint64_t values[3]);
 /* Pending, preparing, concurrent queries, delta records, writer waits,
    active/peak scratch bytes, publications; publication total/max/last ms. */
 int anchor_index_fission_progress(AnchorIndex*,uint64_t values[8],double timings[3]);

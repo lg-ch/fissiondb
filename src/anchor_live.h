@@ -12,6 +12,7 @@ typedef struct {
     int (*dot)(const int8_t*,const int8_t*,int);
     int (*encode)(void*,const float*,const int8_t*,uint8_t*);
     void (*sketch)(void*,const float*,float*);
+    int center_dim; /* native input width; journal/residual vectors retain dim */
 } AnchorFissionOps;
 typedef float (*AnchorFissionScore)(void*,const int8_t*,const uint8_t*);
 /* Reuse the query's ring and bounded aligned buffers for mutable cells too. */
@@ -30,6 +31,9 @@ int anchor_live_fission_config(AnchorLive*,uint32_t*,uint32_t*);
 int anchor_live_fission_stats(AnchorLive*,uint64_t values[8],double timings[3]);
 int anchor_live_fission_checkpoint(AnchorLive*);
 int anchor_live_fission_flush(AnchorLive*);
+int anchor_live_fission_set_capacity(AnchorLive*,uint32_t);
+uint32_t anchor_live_fission_capacity(AnchorLive*);
+int anchor_live_fission_center_info(AnchorLive*,uint64_t values[3]);
 int anchor_live_fission_progress(AnchorLive*,uint64_t values[8],double timings[3]);
 int anchor_live_search_fission(const AnchorLive*,int,const float*,const roaring_bitmap_t*,uint32_t*,float*,int,int,uint64_t*,uint64_t*,AnchorFissionScore,void*,AnchorLiveIO*);
 int anchor_live_has_fission(const AnchorLive*);

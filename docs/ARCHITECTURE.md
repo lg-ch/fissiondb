@@ -67,8 +67,16 @@ per assignment. Each live vector is assigned to two representatives.
 
 ## Memory
 
-Int8 representatives cost approximately `cell_count × indexed_dimension` bytes,
-plus per-cell metadata and scales. A query context normally owns two 8 MiB IO
+Adaptive int8 representatives store exactly the input width: their used payload
+is `cell_count × input_dimension` bytes. A 768d representative occupies 768 bytes
+in RAM even though its residual transform uses 1024 components. Routing uses the
+native width; residual encoding/scoring reconstruct zero tails only in bounded
+scratch space. Existing checkpoints retain their compatible padded wire format;
+loading them packs the native components without changing cells or residuals.
+
+Representative arrays reserve capacity in advance, so allocated bytes can exceed
+the used payload. Stats expose `center_dim`, `center_bytes` and
+`center_allocated_bytes`; per-cell metadata and scales are additional. A query context normally owns two 8 MiB IO
 buffers and ranking scratch space. It can reduce its buffers to fit its budget,
 or enlarge them for a large cell within that budget.
 
